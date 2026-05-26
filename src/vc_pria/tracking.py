@@ -34,10 +34,11 @@ class RoiTracker:
         if tr is None:
             self.status = "unavailable"
             return
-        ok = tr.init(frame_bgr, tuple(map(float, bbox)))
+        norm_bbox = tuple(int(v) for v in bbox)
+        ok = tr.init(frame_bgr, norm_bbox)
         if ok:
             self.tracker = tr
-            self.bbox = bbox
+            self.bbox = norm_bbox
             self.status = "tracking"
         else:
             self.status = "init_failed"
@@ -54,4 +55,3 @@ class RoiTracker:
         self.bbox = (x, y, w, h)
         self.status = "tracking"
         return self.bbox
-

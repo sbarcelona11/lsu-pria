@@ -139,6 +139,43 @@ def resolve_dataset_path(
     return None
 
 
+def resolve_video_path_with_alternates(
+    root: Path,
+    raw_value: str,
+    file_index: Optional[dict[str, Path]] = None,
+    sibling_hints: Optional[Iterable[str]] = None,
+    preferred_exts: tuple[str, ...] = (".mp4", ".mkv", ".avi"),
+) -> Optional[Path]:
+    primary = resolve_dataset_path(root, raw_value, file_index=file_index, sibling_hints=sibling_hints)
+    if primary is not None:
+        return primary
+
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return None
+
+    p = Path(raw)
+    stem = p.with_suffix("")
+    original_ext = p.suffix.lower()
+
+    candidates: list[str] = []
+    for ext in preferred_exts:
+        if ext != original_ext:
+            candidates.append(str(stem) + ext)
+
+    for alt in candidates:
+        candidate = resolve_dataset_path(root, alt, file_index=file_index, sibling_hints=sibling_hints)
+        if candidate is not None:
+            return candidate
+
+        # Also try basename-only substitution if the CSV path is stale.
+        alt_name = Path(alt).name
+        candidate = resolve_dataset_path(root, alt_name, file_index=file_index, sibling_hints=sibling_hints)
+        if candidate is not None:
+            return candidate
+
+    return None
+
+
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
-

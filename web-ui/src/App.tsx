@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  analyzeVideo,
   exportCsv,
   exportJson,
   getClasses,
@@ -9,6 +10,7 @@ import {
   sessionAction,
   ttsSpeak,
   type ComposeMode,
+  type AnalyzeVideoResponse,
   type InferResponse,
   type MaskSpace,
   type PipelineName,
@@ -87,6 +89,14 @@ export default function App() {
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [autoSpeakLetters, setAutoSpeakLetters] = useState(false);
   const [lastInfer, setLastInfer] = useState<InferResponse | null>(null);
+  const [toolsText, setToolsText] = useState<string>("");
+  const [videoUrlInput, setVideoUrlInput] = useState("");
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoSampleFps, setVideoSampleFps] = useState(4);
+  const [videoMaxFrames, setVideoMaxFrames] = useState(0);
+  const [videoJob, setVideoJob] = useState<AnalyzeVideoResponse | null>(null);
+  const [videoAnalyzeStatus, setVideoAnalyzeStatus] = useState("idle");
+  const [videoAnalyzeError, setVideoAnalyzeError] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -96,16 +106,24 @@ export default function App() {
         const hasL = !!h?.pipelines?.landmarks;
         const hasC = !!h?.pipelines?.cnn;
         const hasS = !!h?.pipelines?.sequence;
+        const hasM = !!h?.pipelines?.multimodal;
         const lCount = c?.classes?.landmarks?.length ?? 0;
         const cCount = c?.classes?.cnn?.length ?? 0;
         const sCount = c?.classes?.sequence?.length ?? 0;
+        const mCount = c?.classes?.multimodal?.length ?? 0;
         setModelsText(
-          `models: landmarks=${hasL ? "on" : "off"}(${lCount}) cnn=${hasC ? "on" : "off"}(${cCount}) sequence=${hasS ? "on" : "off"}(${sCount})`,
+          `models: landmarks=${hasL ? "on" : "off"}(${lCount}) cnn=${hasC ? "on" : "off"}(${cCount}) sequence=${hasS ? "on" : "off"}(${sCount}) multimodal=${hasM ? "on" : "off"}(${mCount})`,
+        );
+        const tools = h?.tools || {};
+        setToolsText(
+          `tools: ffmpeg=${tools.ffmpeg ? "on" : "off"} yt-dlp=${tools.yt_dlp_module || tools.yt_dlp_exe ? "on" : "off"}`,
         );
         if (!hasL && hasC) setPipeline("cnn");
         if (!hasL && !hasC && hasS) setPipeline("sequence");
+        if (!hasL && !hasC && !hasS && hasM) setPipeline("multimodal");
       } catch {
         setModelsText("models: error loading /health");
+        setToolsText("tools: error loading /health");
       }
     })();
   }, [baseUrl]);
@@ -271,6 +289,7 @@ export default function App() {
         <div>
           <h2>VC-pria — Web UI</h2>
           <div className="muted mono">{modelsText}</div>
+          <div className="muted mono">{toolsText}</div>
         </div>
         <div className="pill mono">
           session: <span className="mono">{sessionId || "(creating...)"}</span>
@@ -332,6 +351,10 @@ export default function App() {
               <label>
                 <input type="radio" checked={pipeline === "sequence"} onChange={() => setPipeline("sequence")} />
                 sequence
+              </label>
+              <label>
+                <input type="radio" checked={pipeline === "multimodal"} onChange={() => setPipeline("multimodal")} />
+                multimodal
               </label>
             </div>
           </section>
@@ -454,6 +477,131 @@ export default function App() {
                 <input type="checkbox" checked={autoSpeakLetters} onChange={(e) => setAutoSpeakLetters(e.target.checked)} />
                 include letters
               </label>
+            </div>
+          </section>
+
+          <section>
+            <h3>Video analysis</h3>
+            <div className="stack-gap">
+              <label className="stacked">
+                YouTube / URL directa
+                <input
+                  type="text"
+                  value={videoUrlInput}
+                  onChange={(e) => setVideoUrlInput(e.target.value)}
+                  placeholder="https://youtu.be/..."
+                />
+              </label>
+              <label className="stacked">
+                o subir archivo
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
+                />
+              </label>
+              <div className="row">
+                <label>
+                  sample fps <span className="mono">{videoSampleFps}</span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={12}
+                    value={videoSampleFps}
+                    onChange={(e) => setVideoSampleFps(Number(e.target.value))}
+                  />
+                </label>
+                <label className="stacked narrow">
+                  max frames (0 = todo)
+                  <input
+                    type="number"
+                    min={0}
+                    step={100}
+                    value={videoMaxFrames}
+                    onChange={(e) => setVideoMaxFrames(Number(e.target.value) || 0)}
+                  />
+                </label>
+              </div>
+              <div className="row">
+                <button
+                  onClick={async () => {
+                    setVideoAnalyzeError("");
+                    setVideoAnalyzeStatus("processing...");
+                    setVideoJob(null);
+                    try {
+                      const result = await analyzeVideo(baseUrl, {
+                        file: videoFile,
+                        sourceUrl: videoUrlInput,
+                        pipeline,
+                        mode,
+                        preprocess,
+                        skin_mask: skinMask,
+                        mask_space: maskSpace,
+                        use_tracker: useTracker,
+                        confidence_threshold: confThr,
+                        stable_frames_min: stableFrames,
+                        pause_ms_min: pauseMs,
+                        cooldown_ms: cooldownMs,
+                        sample_fps: videoSampleFps,
+                        max_frames: videoMaxFrames,
+                      });
+                      setVideoJob(result);
+                      setVideoAnalyzeStatus("done");
+                    } catch (e) {
+                      setVideoAnalyzeError(String(e));
+                      setVideoAnalyzeStatus("error");
+                    }
+                  }}
+                  disabled={!videoFile && !videoUrlInput.trim()}
+                >
+                  Analyze video
+                </button>
+                <button
+                  onClick={() => {
+                    if (videoJob?.predicted_text?.trim()) {
+                      ttsSpeak(baseUrl, videoJob.predicted_text.trim()).catch(() => {});
+                    }
+                  }}
+                  disabled={!videoJob?.predicted_text?.trim()}
+                >
+                  Speak result
+                </button>
+              </div>
+              <div className="status mono">{videoAnalyzeStatus}</div>
+              {videoAnalyzeError ? <div className="error-box mono">{videoAnalyzeError}</div> : null}
+              {videoJob ? (
+                <div className="stack-gap">
+                  <video
+                    className="result-video"
+                    controls
+                    src={`${baseUrl}${videoJob.processed_video_url}`}
+                  />
+                  <textarea readOnly value={videoJob.predicted_text || ""} />
+                  <div className="small mono">
+                    frames={videoJob.frames_used}/{videoJob.frames_total} preds={videoJob.predictions_count} avg_conf=
+                    {videoJob.avg_confidence.toFixed(2)} eff_fps={videoJob.effective_fps.toFixed(2)} time=
+                    {videoJob.elapsed_s.toFixed(1)}s
+                  </div>
+                  <div className="row">
+                    <button
+                      onClick={async () => {
+                        const res = await fetch(`${baseUrl}${videoJob.summary_url}`);
+                        const txt = await res.text();
+                        downloadText(`video_job_${videoJob.job_id}.json`, txt, "application/json");
+                      }}
+                    >
+                      Export summary
+                    </button>
+                    <button
+                      onClick={() => {
+                        window.open(`${baseUrl}${videoJob.processed_video_url}`, "_blank");
+                      }}
+                    >
+                      Open video
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
         </div>

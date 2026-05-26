@@ -11,7 +11,7 @@ from vc_pria.demo import DemoRunner
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    p.add_argument("--pipeline", choices=["landmarks", "cnn", "sequence"], default="landmarks")
+    p.add_argument("--pipeline", choices=["landmarks", "cnn", "sequence", "multimodal"], default="landmarks")
     p.add_argument("--model", type=str, required=True)
     p.add_argument("--camera", type=int, default=0)
     p.add_argument("--width", type=int, default=1280)

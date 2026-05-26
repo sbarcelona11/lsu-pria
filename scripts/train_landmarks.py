@@ -76,8 +76,17 @@ def main() -> None:
     )
     clf.fit(X_train, y_train)
     y_pred = clf.predict(X_test)
-    print(classification_report(y_test, y_pred, target_names=labels))
-    print("confusion_matrix:\n", confusion_matrix(y_test, y_pred))
+    labels_all = list(range(len(labels)))
+    print(
+        classification_report(
+            y_test,
+            y_pred,
+            labels=labels_all,
+            target_names=labels,
+            zero_division=0,
+        )
+    )
+    print("confusion_matrix:\n", confusion_matrix(y_test, y_pred, labels=labels_all))
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -26,12 +26,24 @@ def main() -> None:
     sp.add_argument("--landmarks-model", default="")
     sp.add_argument("--cnn-model", default="")
     sp.add_argument("--sequence-model", default="")
+    sp.add_argument("--multimodal-model", default="")
     sp.add_argument("--host", default="127.0.0.1")
     sp.add_argument("--port", default="8000")
     sp.add_argument("--open-browser", action="store_true")
 
+    sp = sub.add_parser("app-dev", help="Run backend and frontend dev servers together")
+    sp.add_argument("--landmarks-model", default="")
+    sp.add_argument("--cnn-model", default="")
+    sp.add_argument("--sequence-model", default="")
+    sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--stack-work-dir", default="")
+    sp.add_argument("--api-host", default="127.0.0.1")
+    sp.add_argument("--api-port", default="8000")
+    sp.add_argument("--ui-port", default="5173")
+    sp.add_argument("--install-ui", action="store_true")
+
     sp = sub.add_parser("demo", help="Run OpenCV desktop demo")
-    sp.add_argument("--pipeline", choices=["landmarks", "cnn", "sequence"], default="landmarks")
+    sp.add_argument("--pipeline", choices=["landmarks", "cnn", "sequence", "multimodal"], default="landmarks")
     sp.add_argument("--model", required=True)
     sp.add_argument("--camera", default="0")
     sp.add_argument("--width", default="1280")
@@ -51,6 +63,13 @@ def main() -> None:
     sp.add_argument("--camera", default="0")
     sp.add_argument("--duration", default="2.0")
 
+    sp = sub.add_parser("collect-mm-seq", help="Collect multimodal sequences (hands + pose + face)")
+    sp.add_argument("--out", required=True)
+    sp.add_argument("--labels", nargs="+", required=True)
+    sp.add_argument("--subject-id", default="S1")
+    sp.add_argument("--camera", default="0")
+    sp.add_argument("--duration", default="2.5")
+
     sp = sub.add_parser("train-landmarks", help="Train landmarks baseline model")
     sp.add_argument("--csv", required=True)
     sp.add_argument("--out", required=True)
@@ -69,6 +88,49 @@ def main() -> None:
     sp.add_argument("--seq-dir", required=True)
     sp.add_argument("--out", required=True)
 
+    sp = sub.add_parser("train-mm-seq", help="Train multimodal temporal baseline")
+    sp.add_argument("--seq-dir", required=True)
+    sp.add_argument("--out", required=True)
+
+    sp = sub.add_parser("train-mm-stack", help="Run the recommended local multimodal training stack")
+    sp.add_argument("--seq-dir", default="")
+    sp.add_argument("--seq-dirs", nargs="*", default=None)
+    sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--window", default="24")
+    sp.add_argument("--min-frames", default="8")
+    sp.add_argument("--group-col", choices=["group_id", "subject_id", "none"], default="subject_id")
+
+    sp = sub.add_parser("train-videos-stack", help="Prepare labeled videos and run the frame-based training stack")
+    sp.add_argument("--videos-root", required=True)
+    sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--layout", choices=["auto", "label", "subject_label"], default="auto")
+    sp.add_argument("--subject-default", default="video")
+    sp.add_argument("--exts", nargs="*", default=[".mp4", ".avi", ".mov", ".mkv", ".webm"])
+    sp.add_argument("--fps", default="4.0")
+    sp.add_argument("--max-per-video", default="120")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--skin-mask", action="store_true")
+    sp.add_argument("--camera-like", action="store_true")
+    sp.add_argument("--cnn-image-col", default="img_raw_path")
+    sp.add_argument("--group-col", default="group_id")
+    sp.add_argument("--cnn-epochs", default="10")
+    sp.add_argument("--cnn-device", default="cpu")
+    sp.add_argument("--skip-ablation", action="store_true")
+    sp.add_argument("--ablation-seconds", default="10")
+    sp.add_argument("--camera", default="0")
+
+    sp = sub.add_parser("train-videos-mm-stack", help="Prepare labeled videos and run the multimodal temporal training stack")
+    sp.add_argument("--videos-root", required=True)
+    sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--layout", choices=["auto", "label", "subject_label"], default="auto")
+    sp.add_argument("--subject-default", default="video")
+    sp.add_argument("--exts", nargs="*", default=[".mp4", ".avi", ".mov", ".mkv", ".webm"])
+    sp.add_argument("--fps", default="8.0")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--window", default="24")
+    sp.add_argument("--min-frames", default="8")
+    sp.add_argument("--group-col", choices=["group_id", "subject_id", "none"], default="group_id")
+
     sp = sub.add_parser("train-stack", help="Run the recommended local end-to-end training stack")
     sp.add_argument("--csv", default="")
     sp.add_argument("--csvs", nargs="*", default=None)
@@ -81,11 +143,18 @@ def main() -> None:
     sp.add_argument("--ablation-seconds", default="10")
     sp.add_argument("--camera", default="0")
 
+    sp = sub.add_parser("demo-stack-web", help="Launch the web demo from a train-stack workspace")
+    sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--host", default="127.0.0.1")
+    sp.add_argument("--port", default="8000")
+    sp.add_argument("--open-browser", action="store_true")
+
     sp = sub.add_parser("ilsut-train", help="Prepare iLSU-T weak labels and train project models")
-    sp.add_argument("--episodes-csv", required=True)
+    sp.add_argument("--episodes-csv", default="auto")
     sp.add_argument("--root", required=True)
     sp.add_argument("--keywords", required=True)
     sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--sources", nargs="*", default=None)
     sp.add_argument("--pipelines", nargs="+", choices=["landmarks", "cnn"], default=["cnn"])
     sp.add_argument("--fps", default="5.0")
     sp.add_argument("--max-per-seg", default="40")
@@ -97,6 +166,36 @@ def main() -> None:
     sp.add_argument("--cnn-device", default="cpu")
     sp.add_argument("--cnn-use-masked", action="store_true")
     sp.add_argument("--path-mode", choices=["auto", "relative", "filename"], default="auto")
+    sp.add_argument("--manifest-limit", default="0")
+    sp.add_argument("--min-label-count", default="0")
+    sp.add_argument("--skip-ablation", action="store_true")
+    sp.add_argument("--ablation-seconds", default="10")
+    sp.add_argument("--camera", default="0")
+
+    sp = sub.add_parser("ilsut-train-mm", help="Prepare iLSU-T weak labels and train multimodal temporal baseline")
+    sp.add_argument("--episodes-csv", default="auto")
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--keywords", required=True)
+    sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--sources", nargs="*", default=None)
+    sp.add_argument("--fps", default="6.0")
+    sp.add_argument("--max-per-seg", default="40")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--path-mode", choices=["auto", "relative", "filename"], default="auto")
+    sp.add_argument("--manifest-limit", default="0")
+    sp.add_argument("--min-label-count", default="0")
+    sp.add_argument("--window", default="24")
+    sp.add_argument("--min-frames", default="8")
+    sp.add_argument("--group-col", choices=["group_id", "subject_id", "none"], default="group_id")
+
+    sp = sub.add_parser("ilsut-preset", help="Run a practical preset for iLSU-T training on extracted data")
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--keywords", default="deliverables/ilsut_keywords.example.json")
+    sp.add_argument("--source", default="source2")
+    sp.add_argument("--mode", choices=["frame", "multimodal", "both"], default="both")
+    sp.add_argument("--preset", choices=["quick", "standard"], default="quick")
+    sp.add_argument("--work-root", default="runs/ilsut_presets")
+    sp.add_argument("--cnn-device", default="cpu")
 
     sp = sub.add_parser("ilsut-download", help="Download iLSU-T archives from the local manifest")
     sp.add_argument("--manifest", default="deliverables/ilsut_downloads.json")
@@ -109,6 +208,136 @@ def main() -> None:
     sp.add_argument("--out-root", required=True)
     sp.add_argument("--sources", nargs="+", default=["source2", "source3"])
     sp.add_argument("--skip-existing", action="store_true")
+
+    sp = sub.add_parser("ilsut-convert-videos", help="Convert extracted iLSU-T .avi videos to mp4 or mkv")
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--sources", nargs="+", default=["source2", "source3"])
+    sp.add_argument("--input-ext", default=".avi")
+    sp.add_argument("--output-ext", choices=[".mp4", ".mkv"], default=".mp4")
+    sp.add_argument("--skip-existing", action="store_true")
+    sp.add_argument("--tool", choices=["auto", "ffmpeg", "opencv"], default="auto")
+    sp.add_argument("--quality", choices=["copy", "fast", "balanced"], default="balanced")
+
+    sp = sub.add_parser("ilsut-build-episodes-csv", help="Generate an episodes.csv-like file from extracted iLSU-T files")
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--out", required=True)
+    sp.add_argument("--sources", nargs="*", default=None)
+    sp.add_argument("--video-dir-name", default="episodes")
+    sp.add_argument("--whisperx-dir-name", default="whisperx")
+    sp.add_argument("--include-unmatched", action="store_true")
+    sp.add_argument("--strict", action="store_true")
+
+    sp = sub.add_parser("ilsut-analyze-support", help="Summarize weak-label support by class for extracted iLSU-T sources")
+    sp.add_argument("--episodes-csv", default="auto")
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--keywords", required=True)
+    sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--sources", nargs="*", default=None)
+    sp.add_argument("--path-mode", choices=["auto", "relative", "filename"], default="auto")
+    sp.add_argument("--manifest-limit", default="0")
+    sp.add_argument("--min-label-count", default="20")
+
+    sp = sub.add_parser("ilsut-prepare-slt-subset", help="Prepare an iLSU-T clip-level subset with train/val/test splits")
+    sp.add_argument("--episodes-csv", default="auto")
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--keywords", required=True)
+    sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--sources", nargs="*", default=None)
+    sp.add_argument("--path-mode", choices=["auto", "relative", "filename"], default="auto")
+    sp.add_argument("--manifest-limit", default="0")
+    sp.add_argument("--min-label-count", default="20")
+    sp.add_argument("--labels-json", default="")
+    sp.add_argument("--test-size", default="0.2")
+    sp.add_argument("--val-size", default="0.1")
+    sp.add_argument("--seed", default="42")
+    sp.add_argument("--export-clips", action="store_true")
+    sp.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
+    sp.add_argument("--max-clips", default="0")
+
+    sp = sub.add_parser("ilsut-audit-keywords", help="Audit which transcript variants are matched by the current iLSU-T keywords rules")
+    sp.add_argument("--episodes-csv", default="auto")
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--keywords", required=True)
+    sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--sources", nargs="*", default=None)
+    sp.add_argument("--path-mode", choices=["auto", "relative", "filename"], default="auto")
+    sp.add_argument("--manifest-limit", default="0")
+    sp.add_argument("--top-k", default="10")
+
+    sp = sub.add_parser("validate-videos", help="Run the recognition pipeline over validation videos")
+    sp.add_argument("--pipeline", choices=["landmarks", "cnn", "sequence", "multimodal"], default="landmarks")
+    sp.add_argument("--landmarks-model", default="")
+    sp.add_argument("--cnn-model", default="")
+    sp.add_argument("--sequence-model", default="")
+    sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--videos", nargs="*", default=None)
+    sp.add_argument("--cases-json", default="")
+    sp.add_argument("--out-dir", required=True)
+    sp.add_argument("--mode", choices=["both", "words", "spelling"], default="both")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--skin-mask", action="store_true")
+    sp.add_argument("--mask-space", choices=["ycrcb", "hsv"], default="ycrcb")
+    sp.add_argument("--use-tracker", action="store_true")
+    sp.add_argument("--confidence-threshold", default="0.75")
+    sp.add_argument("--stable-frames-min", default="6")
+    sp.add_argument("--pause-ms-min", default="350")
+    sp.add_argument("--cooldown-ms", default="800")
+    sp.add_argument("--sample-fps", default="0")
+
+    sp = sub.add_parser("compare-video-pipelines", help="Compare multiple pipelines over the same validation videos")
+    sp.add_argument("--pipelines", nargs="+", choices=["landmarks", "cnn", "sequence", "multimodal"], required=True)
+    sp.add_argument("--landmarks-model", default="")
+    sp.add_argument("--cnn-model", default="")
+    sp.add_argument("--sequence-model", default="")
+    sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--videos", nargs="*", default=None)
+    sp.add_argument("--cases-json", default="")
+    sp.add_argument("--out-dir", required=True)
+    sp.add_argument("--mode", choices=["both", "words", "spelling"], default="both")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--skin-mask", action="store_true")
+    sp.add_argument("--mask-space", choices=["ycrcb", "hsv"], default="ycrcb")
+    sp.add_argument("--use-tracker", action="store_true")
+    sp.add_argument("--confidence-threshold", default="0.75")
+    sp.add_argument("--stable-frames-min", default="6")
+    sp.add_argument("--pause-ms-min", default="350")
+    sp.add_argument("--cooldown-ms", default="800")
+    sp.add_argument("--sample-fps", default="0")
+
+    sp = sub.add_parser("recommend-demo-pipeline", help="Generate a recommended demo setup from video comparison results")
+    sp.add_argument("--compare-json", required=True)
+    sp.add_argument("--out-dir", required=True)
+    sp.add_argument("--host", default="127.0.0.1")
+    sp.add_argument("--port", default="8000")
+    sp.add_argument("--landmarks-model", default="")
+    sp.add_argument("--cnn-model", default="")
+    sp.add_argument("--sequence-model", default="")
+    sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--cases-json", default="")
+
+    sp = sub.add_parser("finalize-demo-selection", help="Run comparison + recommendation for the final demo in one shot")
+    sp.add_argument("--out-dir", required=True)
+    sp.add_argument("--cases-json", default="")
+    sp.add_argument("--videos", nargs="*", default=None)
+    sp.add_argument("--frame-work-dir", default="")
+    sp.add_argument("--multimodal-work-dir", default="")
+    sp.add_argument("--landmarks-model", default="")
+    sp.add_argument("--cnn-model", default="")
+    sp.add_argument("--sequence-model", default="")
+    sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--pipelines", nargs="*", choices=["landmarks", "cnn", "sequence", "multimodal"], default=None)
+    sp.add_argument("--mode", choices=["both", "words", "spelling"], default="both")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--skin-mask", action="store_true")
+    sp.add_argument("--mask-space", choices=["ycrcb", "hsv"], default="ycrcb")
+    sp.add_argument("--use-tracker", action="store_true")
+    sp.add_argument("--confidence-threshold", default="0.75")
+    sp.add_argument("--stable-frames-min", default="6")
+    sp.add_argument("--pause-ms-min", default="350")
+    sp.add_argument("--cooldown-ms", default="800")
+    sp.add_argument("--sample-fps", default="0")
+    sp.add_argument("--host", default="127.0.0.1")
+    sp.add_argument("--port", default="8000")
 
     sp = sub.add_parser("eval-split", help="Evaluate with random/group split")
     sp.add_argument("--csv", required=True)
@@ -193,8 +422,35 @@ def main() -> None:
             cmd += ["--cnn-model", args.cnn_model]
         if args.sequence_model:
             cmd += ["--sequence-model", args.sequence_model]
+        if args.multimodal_model:
+            cmd += ["--multimodal-model", args.multimodal_model]
         if args.open_browser:
             cmd += ["--open-browser"]
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "app-dev":
+        cmd = [
+            py,
+            str(repo / "scripts" / "app_dev.py"),
+            "--api-host",
+            str(args.api_host),
+            "--api-port",
+            str(args.api_port),
+            "--ui-port",
+            str(args.ui_port),
+        ]
+        if args.landmarks_model:
+            cmd += ["--landmarks-model", args.landmarks_model]
+        if args.cnn_model:
+            cmd += ["--cnn-model", args.cnn_model]
+        if args.sequence_model:
+            cmd += ["--sequence-model", args.sequence_model]
+        if args.multimodal_model:
+            cmd += ["--multimodal-model", args.multimodal_model]
+        if args.stack_work_dir:
+            cmd += ["--stack-work-dir", args.stack_work_dir]
+        if args.install_ui:
+            cmd += ["--install-ui"]
         raise SystemExit(_run(cmd))
 
     if args.cmd == "demo":
@@ -250,6 +506,24 @@ def main() -> None:
         cmd = [str(x) for x in cmd]
         raise SystemExit(_run(cmd))
 
+    if args.cmd == "collect-mm-seq":
+        cmd = [
+            py,
+            str(repo / "scripts" / "collect_multimodal_sequence.py"),
+            "--out",
+            args.out,
+            "--subject-id",
+            args.subject_id,
+            "--camera",
+            int(args.camera),
+            "--duration",
+            float(args.duration),
+            "--labels",
+            *args.labels,
+        ]
+        cmd = [str(x) for x in cmd]
+        raise SystemExit(_run(cmd))
+
     if args.cmd == "train-landmarks":
         cmd = [py, str(repo / "scripts" / "train_landmarks.py"), "--csv", args.csv, "--out", args.out]
         raise SystemExit(_run(cmd))
@@ -286,6 +560,104 @@ def main() -> None:
         ]
         raise SystemExit(_run(cmd))
 
+    if args.cmd == "train-mm-seq":
+        cmd = [
+            py,
+            str(repo / "scripts" / "train_multimodal_sequence.py"),
+            "--seq-dir",
+            args.seq_dir,
+            "--out",
+            args.out,
+        ]
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "train-mm-stack":
+        cmd = [
+            py,
+            str(repo / "scripts" / "train_multimodal_stack.py"),
+            "--work-dir",
+            args.work_dir,
+            "--window",
+            args.window,
+            "--min-frames",
+            args.min_frames,
+            "--group-col",
+            args.group_col,
+        ]
+        if args.seq_dir:
+            cmd += ["--seq-dir", args.seq_dir]
+        if args.seq_dirs:
+            cmd += ["--seq-dirs", *args.seq_dirs]
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "train-videos-stack":
+        cmd = [
+            py,
+            str(repo / "scripts" / "train_videos_stack.py"),
+            "--videos-root",
+            args.videos_root,
+            "--work-dir",
+            args.work_dir,
+            "--layout",
+            args.layout,
+            "--subject-default",
+            args.subject_default,
+            "--fps",
+            args.fps,
+            "--max-per-video",
+            args.max_per_video,
+            "--cnn-image-col",
+            args.cnn_image_col,
+            "--group-col",
+            args.group_col,
+            "--cnn-epochs",
+            args.cnn_epochs,
+            "--cnn-device",
+            args.cnn_device,
+            "--ablation-seconds",
+            args.ablation_seconds,
+            "--camera",
+            args.camera,
+            "--exts",
+            *args.exts,
+        ]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        if args.skin_mask:
+            cmd.append("--skin-mask")
+        if args.camera_like:
+            cmd.append("--camera-like")
+        if args.skip_ablation:
+            cmd.append("--skip-ablation")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "train-videos-mm-stack":
+        cmd = [
+            py,
+            str(repo / "scripts" / "train_videos_mm_stack.py"),
+            "--videos-root",
+            args.videos_root,
+            "--work-dir",
+            args.work_dir,
+            "--layout",
+            args.layout,
+            "--subject-default",
+            args.subject_default,
+            "--fps",
+            args.fps,
+            "--window",
+            args.window,
+            "--min-frames",
+            args.min_frames,
+            "--group-col",
+            args.group_col,
+            "--exts",
+            *args.exts,
+        ]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        raise SystemExit(_run(cmd))
+
     if args.cmd == "train-stack":
         cmd = [
             py,
@@ -313,6 +685,21 @@ def main() -> None:
             cmd.append("--skip-ablation")
         raise SystemExit(_run(cmd))
 
+    if args.cmd == "demo-stack-web":
+        cmd = [
+            py,
+            str(repo / "scripts" / "launch_stack_demo.py"),
+            "--work-dir",
+            args.work_dir,
+            "--host",
+            args.host,
+            "--port",
+            args.port,
+        ]
+        if args.open_browser:
+            cmd.append("--open-browser")
+        raise SystemExit(_run(cmd))
+
     if args.cmd == "ilsut-train":
         cmd = [
             py,
@@ -337,9 +724,19 @@ def main() -> None:
             args.cnn_device,
             "--path-mode",
             args.path_mode,
+            "--manifest-limit",
+            args.manifest_limit,
+            "--min-label-count",
+            args.min_label_count,
             "--pipelines",
             *args.pipelines,
+            "--ablation-seconds",
+            args.ablation_seconds,
+            "--camera",
+            args.camera,
         ]
+        if args.sources:
+            cmd += ["--sources", *args.sources]
         if args.preprocess:
             cmd.append("--preprocess")
         if args.skin_mask:
@@ -348,6 +745,64 @@ def main() -> None:
             cmd.append("--camera-like")
         if args.cnn_use_masked:
             cmd.append("--cnn-use-masked")
+        if args.skip_ablation:
+            cmd.append("--skip-ablation")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "ilsut-train-mm":
+        cmd = [
+            py,
+            str(repo / "scripts" / "train_ilsut_multimodal.py"),
+            "--episodes-csv",
+            args.episodes_csv,
+            "--root",
+            args.root,
+            "--keywords",
+            args.keywords,
+            "--work-dir",
+            args.work_dir,
+            "--fps",
+            args.fps,
+            "--max-per-seg",
+            args.max_per_seg,
+            "--path-mode",
+            args.path_mode,
+            "--manifest-limit",
+            args.manifest_limit,
+            "--min-label-count",
+            args.min_label_count,
+            "--window",
+            args.window,
+            "--min-frames",
+            args.min_frames,
+            "--group-col",
+            args.group_col,
+        ]
+        if args.sources:
+            cmd += ["--sources", *args.sources]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "ilsut-preset":
+        cmd = [
+            py,
+            str(repo / "scripts" / "run_ilsut_preset.py"),
+            "--root",
+            args.root,
+            "--keywords",
+            args.keywords,
+            "--source",
+            args.source,
+            "--mode",
+            args.mode,
+            "--preset",
+            args.preset,
+            "--work-root",
+            args.work_root,
+            "--cnn-device",
+            args.cnn_device,
+        ]
         raise SystemExit(_run(cmd))
 
     if args.cmd == "ilsut-download":
@@ -378,6 +833,293 @@ def main() -> None:
         ]
         if args.skip_existing:
             cmd.append("--skip-existing")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "ilsut-convert-videos":
+        cmd = [
+            py,
+            str(repo / "scripts" / "convert_ilsut_videos.py"),
+            "--root",
+            args.root,
+            "--sources",
+            *args.sources,
+            "--input-ext",
+            args.input_ext,
+            "--output-ext",
+            args.output_ext,
+            "--tool",
+            args.tool,
+            "--quality",
+            args.quality,
+        ]
+        if args.skip_existing:
+            cmd.append("--skip-existing")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "ilsut-build-episodes-csv":
+        cmd = [
+            py,
+            str(repo / "scripts" / "build_ilsut_episodes_csv.py"),
+            "--root",
+            args.root,
+            "--out",
+            args.out,
+            "--video-dir-name",
+            args.video_dir_name,
+            "--whisperx-dir-name",
+            args.whisperx_dir_name,
+        ]
+        if args.sources:
+            cmd += ["--sources", *args.sources]
+        if args.include_unmatched:
+            cmd.append("--include-unmatched")
+        if args.strict:
+            cmd.append("--strict")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "ilsut-analyze-support":
+        cmd = [
+            py,
+            str(repo / "scripts" / "analyze_ilsut_support.py"),
+            "--episodes-csv",
+            args.episodes_csv,
+            "--root",
+            args.root,
+            "--keywords",
+            args.keywords,
+            "--work-dir",
+            args.work_dir,
+            "--path-mode",
+            args.path_mode,
+            "--manifest-limit",
+            args.manifest_limit,
+            "--min-label-count",
+            args.min_label_count,
+        ]
+        if args.sources:
+            cmd += ["--sources", *args.sources]
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "ilsut-prepare-slt-subset":
+        cmd = [
+            py,
+            str(repo / "scripts" / "prepare_ilsut_slt_subset.py"),
+            "--episodes-csv",
+            args.episodes_csv,
+            "--root",
+            args.root,
+            "--keywords",
+            args.keywords,
+            "--work-dir",
+            args.work_dir,
+            "--path-mode",
+            args.path_mode,
+            "--manifest-limit",
+            args.manifest_limit,
+            "--min-label-count",
+            args.min_label_count,
+            "--labels-json",
+            args.labels_json,
+            "--test-size",
+            args.test_size,
+            "--val-size",
+            args.val_size,
+            "--seed",
+            args.seed,
+            "--clip-ext",
+            args.clip_ext,
+            "--max-clips",
+            args.max_clips,
+        ]
+        if args.sources:
+            cmd += ["--sources", *args.sources]
+        if args.export_clips:
+            cmd.append("--export-clips")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "ilsut-audit-keywords":
+        cmd = [
+            py,
+            str(repo / "scripts" / "audit_ilsut_keywords.py"),
+            "--episodes-csv",
+            args.episodes_csv,
+            "--root",
+            args.root,
+            "--keywords",
+            args.keywords,
+            "--work-dir",
+            args.work_dir,
+            "--path-mode",
+            args.path_mode,
+            "--manifest-limit",
+            args.manifest_limit,
+            "--top-k",
+            args.top_k,
+        ]
+        if args.sources:
+            cmd += ["--sources", *args.sources]
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "validate-videos":
+        cmd = [
+            py,
+            str(repo / "scripts" / "validate_videos.py"),
+            "--pipeline",
+            args.pipeline,
+            "--out-dir",
+            args.out_dir,
+            "--mode",
+            args.mode,
+            "--mask-space",
+            args.mask_space,
+            "--confidence-threshold",
+            args.confidence_threshold,
+            "--stable-frames-min",
+            args.stable_frames_min,
+            "--pause-ms-min",
+            args.pause_ms_min,
+            "--cooldown-ms",
+            args.cooldown_ms,
+            "--sample-fps",
+            args.sample_fps,
+        ]
+        if args.landmarks_model:
+            cmd += ["--landmarks-model", args.landmarks_model]
+        if args.cnn_model:
+            cmd += ["--cnn-model", args.cnn_model]
+        if args.sequence_model:
+            cmd += ["--sequence-model", args.sequence_model]
+        if args.multimodal_model:
+            cmd += ["--multimodal-model", args.multimodal_model]
+        if args.videos:
+            cmd += ["--videos", *args.videos]
+        if args.cases_json:
+            cmd += ["--cases-json", args.cases_json]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        if args.skin_mask:
+            cmd.append("--skin-mask")
+        if args.use_tracker:
+            cmd.append("--use-tracker")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "compare-video-pipelines":
+        cmd = [
+            py,
+            str(repo / "scripts" / "compare_video_pipelines.py"),
+            "--pipelines",
+            *args.pipelines,
+            "--out-dir",
+            args.out_dir,
+            "--mode",
+            args.mode,
+            "--mask-space",
+            args.mask_space,
+            "--confidence-threshold",
+            args.confidence_threshold,
+            "--stable-frames-min",
+            args.stable_frames_min,
+            "--pause-ms-min",
+            args.pause_ms_min,
+            "--cooldown-ms",
+            args.cooldown_ms,
+            "--sample-fps",
+            args.sample_fps,
+        ]
+        if args.landmarks_model:
+            cmd += ["--landmarks-model", args.landmarks_model]
+        if args.cnn_model:
+            cmd += ["--cnn-model", args.cnn_model]
+        if args.sequence_model:
+            cmd += ["--sequence-model", args.sequence_model]
+        if args.multimodal_model:
+            cmd += ["--multimodal-model", args.multimodal_model]
+        if args.videos:
+            cmd += ["--videos", *args.videos]
+        if args.cases_json:
+            cmd += ["--cases-json", args.cases_json]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        if args.skin_mask:
+            cmd.append("--skin-mask")
+        if args.use_tracker:
+            cmd.append("--use-tracker")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "recommend-demo-pipeline":
+        cmd = [
+            py,
+            str(repo / "scripts" / "recommend_demo_pipeline.py"),
+            "--compare-json",
+            args.compare_json,
+            "--out-dir",
+            args.out_dir,
+            "--host",
+            args.host,
+            "--port",
+            args.port,
+        ]
+        if args.landmarks_model:
+            cmd += ["--landmarks-model", args.landmarks_model]
+        if args.cnn_model:
+            cmd += ["--cnn-model", args.cnn_model]
+        if args.sequence_model:
+            cmd += ["--sequence-model", args.sequence_model]
+        if args.multimodal_model:
+            cmd += ["--multimodal-model", args.multimodal_model]
+        if args.cases_json:
+            cmd += ["--cases-json", args.cases_json]
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "finalize-demo-selection":
+        cmd = [
+            py,
+            str(repo / "scripts" / "finalize_demo_selection.py"),
+            "--out-dir",
+            args.out_dir,
+            "--mode",
+            args.mode,
+            "--mask-space",
+            args.mask_space,
+            "--confidence-threshold",
+            args.confidence_threshold,
+            "--stable-frames-min",
+            args.stable_frames_min,
+            "--pause-ms-min",
+            args.pause_ms_min,
+            "--cooldown-ms",
+            args.cooldown_ms,
+            "--sample-fps",
+            args.sample_fps,
+            "--host",
+            args.host,
+            "--port",
+            args.port,
+        ]
+        if args.cases_json:
+            cmd += ["--cases-json", args.cases_json]
+        if args.videos:
+            cmd += ["--videos", *args.videos]
+        if args.frame_work_dir:
+            cmd += ["--frame-work-dir", args.frame_work_dir]
+        if args.multimodal_work_dir:
+            cmd += ["--multimodal-work-dir", args.multimodal_work_dir]
+        if args.landmarks_model:
+            cmd += ["--landmarks-model", args.landmarks_model]
+        if args.cnn_model:
+            cmd += ["--cnn-model", args.cnn_model]
+        if args.sequence_model:
+            cmd += ["--sequence-model", args.sequence_model]
+        if args.multimodal_model:
+            cmd += ["--multimodal-model", args.multimodal_model]
+        if args.pipelines:
+            cmd += ["--pipelines", *args.pipelines]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        if args.skin_mask:
+            cmd.append("--skin-mask")
+        if args.use_tracker:
+            cmd.append("--use-tracker")
         raise SystemExit(_run(cmd))
 
     if args.cmd == "eval-split":

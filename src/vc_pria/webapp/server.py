@@ -4,6 +4,7 @@ import argparse
 import base64
 import csv
 import io
+import json
 import time
 import uuid
 from dataclasses import dataclass
@@ -20,13 +21,16 @@ from fastapi.staticfiles import StaticFiles
 import sys
 
 from ..hand import HandDetector
+from ..multimodal import HolisticDetector, multimodal_bbox, multimodal_primary_hand_landmarks
 from ..opencv_utils import SkinMaskConfig, apply_clahe, maybe_denoise, skin_mask_hsv, skin_mask_ycrcb
 from ..pipelines.cnn import CnnPipeline
 from ..pipelines.landmarks import LandmarksPipeline
+from ..pipelines.multimodal_sequence import MultimodalSequencePipeline
 from ..pipelines.sequence import SequencePipeline
 from ..tracking import RoiTracker
 from .composer import ComposeConfig, ComposeMode, ComposeState
 from .tts import TtsEngine
+from .video_analysis import VideoAnalysisConfig, analyze_video, download_video_source, load_video_pipeline, tools_status
 
 
 INDEX_HTML = """<!doctype html>
@@ -74,6 +78,7 @@ INDEX_HTML = """<!doctype html>
         <label><input id="pipe_landmarks" type="radio" name="pipeline" value="landmarks" checked/> landmarks</label>
         <label><input id="pipe_cnn" type="radio" name="pipeline" value="cnn"/> cnn</label>
         <label><input id="pipe_sequence" type="radio" name="pipeline" value="sequence"/> sequence</label>
+        <label><input id="pipe_multimodal" type="radio" name="pipeline" value="multimodal"/> multimodal</label>
         <hr style="width:100%; border:none; border-top:1px solid rgba(255,255,255,0.12)"/>
         <div><b>Compose mode</b></div>
         <label><input type="radio" name="mode" value="both" checked/> both</label>
@@ -142,6 +147,8 @@ INDEX_HTML = """<!doctype html>
       const modelsEl = document.getElementById('models');
       const pipeLandmarksEl = document.getElementById('pipe_landmarks');
       const pipeCnnEl = document.getElementById('pipe_cnn');
+      const pipeSequenceEl = document.getElementById('pipe_sequence');
+      const pipeMultimodalEl = document.getElementById('pipe_multimodal');
 
       const getPipeline = () => document.querySelector('input[name="pipeline"]:checked').value;
       const getMode = () => document.querySelector('input[name="mode"]:checked').value;
@@ -178,14 +185,22 @@ INDEX_HTML = """<!doctype html>
           const c = await (await fetch('/api/classes')).json();
           const hasL = !!(h.pipelines && h.pipelines.landmarks);
           const hasC = !!(h.pipelines && h.pipelines.cnn);
+          const hasS = !!(h.pipelines && h.pipelines.sequence);
+          const hasM = !!(h.pipelines && h.pipelines.multimodal);
 
           pipeLandmarksEl.disabled = !hasL;
           pipeCnnEl.disabled = !hasC;
+          pipeSequenceEl.disabled = !hasS;
+          pipeMultimodalEl.disabled = !hasM;
           if (!hasL && hasC) pipeCnnEl.checked = true;
+          if (!hasL && !hasC && hasS) pipeSequenceEl.checked = true;
+          if (!hasL && !hasC && !hasS && hasM) pipeMultimodalEl.checked = true;
 
           const lCount = (c.classes && c.classes.landmarks) ? c.classes.landmarks.length : 0;
           const cCount = (c.classes && c.classes.cnn) ? c.classes.cnn.length : 0;
-          modelsEl.textContent = `models: landmarks=${hasL ? 'on' : 'off'}(${lCount}) cnn=${hasC ? 'on' : 'off'}(${cCount})`;
+          const sCount = (c.classes && c.classes.sequence) ? c.classes.sequence.length : 0;
+          const mCount = (c.classes && c.classes.multimodal) ? c.classes.multimodal.length : 0;
+          modelsEl.textContent = `models: landmarks=${hasL ? 'on' : 'off'}(${lCount}) cnn=${hasC ? 'on' : 'off'}(${cCount}) sequence=${hasS ? 'on' : 'off'}(${sCount}) multimodal=${hasM ? 'on' : 'off'}(${mCount})`;
         } catch (e) {
           modelsEl.textContent = 'models: error loading /health';
         }
@@ -354,6 +369,7 @@ class LoadedPipelines:
     landmarks: Optional[LandmarksPipeline] = None
     cnn: Optional[CnnPipeline] = None
     sequence: Optional[SequencePipeline] = None
+    multimodal: Optional[MultimodalSequencePipeline] = None
 
     def get(self, name: str) -> object:
         if name == "landmarks":
@@ -368,6 +384,10 @@ class LoadedPipelines:
             if self.sequence is None:
                 raise HTTPException(status_code=400, detail="sequence model not loaded")
             return self.sequence
+        if name == "multimodal":
+            if self.multimodal is None:
+                raise HTTPException(status_code=400, detail="multimodal model not loaded")
+            return self.multimodal
         raise HTTPException(status_code=400, detail=f"unknown pipeline: {name}")
 
 
@@ -381,8 +401,11 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
         allow_headers=["*"],
     )
     detector = HandDetector(max_num_hands=1)
+    holistic = HolisticDetector()
     skin_cfg = SkinMaskConfig()
     tts = TtsEngine()
+    artifacts_dir = Path(__file__).resolve().parents[3] / "web-artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     @dataclass
     class SessionRuntime:
@@ -405,14 +428,17 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
         l_count = len(pipelines.landmarks.labels) if pipelines.landmarks is not None else 0
         c_count = len(pipelines.cnn.labels) if pipelines.cnn is not None else 0
         s_count = len(pipelines.sequence.labels) if pipelines.sequence is not None else 0
+        m_count = len(pipelines.multimodal.labels) if pipelines.multimodal is not None else 0
         return {
             "ok": True,
             "pipelines": {
                 "landmarks": pipelines.landmarks is not None,
                 "cnn": pipelines.cnn is not None,
                 "sequence": pipelines.sequence is not None,
+                "multimodal": pipelines.multimodal is not None,
             },
-            "classes_count": {"landmarks": l_count, "cnn": c_count, "sequence": s_count},
+            "classes_count": {"landmarks": l_count, "cnn": c_count, "sequence": s_count, "multimodal": m_count},
+            "tools": tools_status(),
         }
 
     @api.get("/classes")
@@ -424,6 +450,8 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
             out["cnn"] = list(pipelines.cnn.labels)
         if pipelines.sequence is not None:
             out["sequence"] = list(pipelines.sequence.labels)
+        if pipelines.multimodal is not None:
+            out["multimodal"] = list(pipelines.multimodal.labels)
         return {"classes": out}
 
     @api.post("/session/new")
@@ -513,6 +541,90 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
         tts.speak(text)
         return {"ok": True}
 
+    @api.post("/video/analyze")
+    async def analyze_video_endpoint(
+        file: Optional[UploadFile] = File(default=None),
+        source_url: str = Form(""),
+        pipeline: str = Form("landmarks"),
+        mode: str = Form("both"),
+        preprocess: str = Form("1"),
+        skin_mask: str = Form("0"),
+        mask_space: str = Form("ycrcb"),
+        use_tracker: str = Form("1"),
+        confidence_threshold: float = Form(0.75),
+        stable_frames_min: int = Form(6),
+        pause_ms_min: int = Form(350),
+        cooldown_ms: int = Form(800),
+        sample_fps: float = Form(4.0),
+        max_frames: int = Form(0),
+    ) -> JSONResponse:
+        source_url = str(source_url or "").strip()
+        if file is None and not source_url:
+            raise HTTPException(status_code=400, detail="subí un archivo o pegá una URL")
+
+        job_id = str(uuid.uuid4())
+        job_dir = artifacts_dir / job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            if file is not None:
+                suffix = Path(file.filename or "uploaded.mp4").suffix or ".mp4"
+                input_path = job_dir / f"input{suffix}"
+                raw = await file.read()
+                input_path.write_bytes(raw)
+            else:
+                input_path = download_video_source(source_url, job_dir)
+
+            pipe = load_video_pipeline(pipelines, pipeline)
+            config = VideoAnalysisConfig(
+                pipeline_name=pipeline,
+                mode=mode if mode in ("both", "words", "spelling") else "both",
+                preprocess=preprocess == "1",
+                skin_mask=skin_mask == "1",
+                mask_space=mask_space if mask_space in ("ycrcb", "hsv") else "ycrcb",
+                use_tracker=use_tracker == "1",
+                confidence_threshold=float(confidence_threshold),
+                stable_frames_min=int(stable_frames_min),
+                pause_ms_min=int(pause_ms_min),
+                cooldown_ms=int(cooldown_ms),
+                sample_fps=float(sample_fps),
+                max_frames=int(max_frames),
+            )
+            output_video_path = job_dir / "processed.mp4"
+            result = analyze_video(
+                video_path=input_path,
+                pipeline=pipe,
+                detector=detector,
+                skin_cfg=skin_cfg,
+                config=config,
+                output_video_path=output_video_path,
+            )
+
+            summary_path = job_dir / "summary.json"
+            summary_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "job_id": job_id,
+                    "input_video_url": f"/artifacts/{job_id}/{input_path.name}",
+                    "processed_video_url": f"/artifacts/{job_id}/processed.mp4",
+                    "summary_url": f"/artifacts/{job_id}/summary.json",
+                    "predicted_text": result["predicted_text"],
+                    "predicted_tokens": result["predicted_tokens"],
+                    "frames_total": result["frames_total"],
+                    "frames_used": result["frames_used"],
+                    "predictions_count": result["predictions_count"],
+                    "avg_confidence": result["avg_confidence"],
+                    "effective_fps": result["effective_fps"],
+                    "elapsed_s": result["elapsed_s"],
+                    "config": result["config"],
+                }
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @api.post("/infer_frame")
     async def infer_frame(
         image: UploadFile = File(...),
@@ -552,9 +664,14 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
                 mask = skin_mask_ycrcb(work, skin_cfg)
 
         frame_rgb = cv2.cvtColor(work, cv2.COLOR_BGR2RGB)
-        hand = detector.detect(frame_rgb)
+        hand = None
+        holistic_res = None
+        if pipeline == "multimodal":
+            holistic_res = holistic.detect(frame_rgb)
+        else:
+            hand = detector.detect(frame_rgb)
 
-        no_hand = hand is None
+        no_hand = hand is None and not (holistic_res is not None and holistic_res.any_hand())
         label = "no_hand"
         conf = 0.0
         bbox = None
@@ -576,7 +693,22 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
                 mode = "both"
             rt.composer.mode = ComposeMode(name=mode)
 
-        if hand is not None:
+        if pipeline == "multimodal":
+            if holistic_res is not None:
+                bbox = multimodal_bbox(holistic_res, work.shape[1], work.shape[0])
+            if bbox is not None and rt is not None and use_tracker == "1":
+                rt.tracker.update_from_detection(work, bbox)
+                rt.last_bbox = bbox
+                tracker_status = rt.tracker.status
+            elif rt is not None and use_tracker == "1":
+                tracked = rt.tracker.track(work)
+                tracker_status = rt.tracker.status
+                if tracked is not None:
+                    bbox = tracked
+                    rt.last_bbox = tracked
+            elif rt is not None:
+                tracker_status = "off"
+        elif hand is not None:
             bbox = hand.bbox
             if rt is not None and bbox is not None and use_tracker == "1":
                 rt.tracker.update_from_detection(work, bbox)
@@ -591,18 +723,37 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
                     rt.last_bbox = tracked
 
         # If we have no landmarks but do have a tracked bbox, allow CNN inference to run.
-        if hand is None and bbox is not None:
+        if pipeline != "multimodal" and hand is None and bbox is not None:
             from ..hand import HandResult
 
             hand = HandResult(landmarks=None, handedness=None, bbox=bbox, score=0.0)
 
-        if hand is not None:
+        if pipeline == "multimodal":
+            pipe = pipelines.get(pipeline)
+            label, conf = pipe.predict_multimodal(
+                holistic_res.left_hand if holistic_res is not None else None,
+                holistic_res.right_hand if holistic_res is not None else None,
+                holistic_res.pose if holistic_res is not None else None,
+                holistic_res.face if holistic_res is not None else None,
+            )
+            no_hand = label == "no_hand"
+            if bbox is None and rt is not None and rt.last_bbox is not None:
+                bbox = rt.last_bbox
+        elif hand is not None:
             pipe = pipelines.get(pipeline)
             label, conf = pipe.predict(work, hand, skin_mask=mask)
             no_hand = label == "no_hand" or (hand.landmarks is None and pipeline == "landmarks")
 
         landmarks_px = None
-        if hand is not None and hand.landmarks is not None:
+        if pipeline == "multimodal" and holistic_res is not None:
+            primary = multimodal_primary_hand_landmarks(holistic_res)
+            if primary is not None:
+                h_img, w_img = work.shape[:2]
+                pts = primary[:, :2].copy()
+                pts[:, 0] *= w_img
+                pts[:, 1] *= h_img
+                landmarks_px = pts.astype(np.int32).tolist()
+        elif hand is not None and hand.landmarks is not None:
             h_img, w_img = work.shape[:2]
             pts = hand.landmarks[:, :2].copy()
             pts[:, 0] *= w_img
@@ -687,6 +838,7 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
         )
 
     app.include_router(api)
+    app.mount("/artifacts", StaticFiles(directory=str(artifacts_dir)), name="artifacts")
     return app
 
 
@@ -695,6 +847,7 @@ def main() -> None:
     ap.add_argument("--landmarks-model", type=str, default="")
     ap.add_argument("--cnn-model", type=str, default="")
     ap.add_argument("--sequence-model", type=str, default="")
+    ap.add_argument("--multimodal-model", type=str, default="")
     ap.add_argument("--host", type=str, default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--open-browser", action="store_true", help="Open the app URL in the default browser")
@@ -713,6 +866,8 @@ def main() -> None:
         pipelines.cnn = CnnPipeline.load(Path(args.cnn_model))
     if args.sequence_model:
         pipelines.sequence = SequencePipeline.load(Path(args.sequence_model))
+    if args.multimodal_model:
+        pipelines.multimodal = MultimodalSequencePipeline.load(Path(args.multimodal_model))
 
     import uvicorn
 

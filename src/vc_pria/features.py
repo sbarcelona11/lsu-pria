@@ -56,3 +56,57 @@ def extract_landmark_features(landmarks_norm: np.ndarray, handedness: str | None
     feat = np.array(dists + angles + rel, dtype=np.float32)
     return feat
 
+
+def _flatten_selected(points: np.ndarray, center: np.ndarray, scale: float, mirror_x: bool = False) -> np.ndarray:
+    pts = points.astype(np.float32).copy()
+    xy = pts[:, :2] - center[None, :]
+    xy = xy / (scale + 1e-6)
+    if mirror_x:
+        xy[:, 0] *= -1.0
+    z = pts[:, 2:3] / (scale + 1e-6)
+    return np.concatenate([xy, z], axis=1).reshape(-1).astype(np.float32)
+
+
+def _zero_like(size: int) -> np.ndarray:
+    return np.zeros((size,), dtype=np.float32)
+
+
+def extract_multimodal_frame_features(
+    left_hand: np.ndarray | None,
+    right_hand: np.ndarray | None,
+    pose: np.ndarray | None,
+    face: np.ndarray | None,
+) -> np.ndarray:
+    shoulder_center = np.array([0.5, 0.5], dtype=np.float32)
+    pose_scale = 1.0
+    if pose is not None and pose.shape[0] >= 5:
+        left_shoulder = pose[3, :2]
+        right_shoulder = pose[4, :2]
+        shoulder_center = (left_shoulder + right_shoulder) / 2.0
+        pose_scale = float(np.linalg.norm(left_shoulder - right_shoulder) + 1e-6)
+
+    face_center = face[0, :2] if face is not None and face.shape[0] > 0 else shoulder_center
+
+    pose_feat = _flatten_selected(pose, shoulder_center, pose_scale) if pose is not None else _zero_like(11 * 3)
+    face_feat = _flatten_selected(face, face_center, pose_scale) if face is not None else _zero_like(6 * 3)
+
+    if left_hand is not None:
+        left_feat = extract_landmark_features(left_hand, handedness=None)
+    else:
+        left_feat = _zero_like(25)
+
+    if right_hand is not None:
+        right_feat = extract_landmark_features(right_hand, handedness="Right")
+    else:
+        right_feat = _zero_like(25)
+
+    presence = np.array(
+        [
+            1.0 if left_hand is not None else 0.0,
+            1.0 if right_hand is not None else 0.0,
+            1.0 if pose is not None else 0.0,
+            1.0 if face is not None else 0.0,
+        ],
+        dtype=np.float32,
+    )
+    return np.concatenate([left_feat, right_feat, pose_feat, face_feat, presence], axis=0).astype(np.float32)
