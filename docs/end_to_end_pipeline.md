@@ -56,7 +56,7 @@ Objetivo: usar `MediaPipe + OpenCV` como nucleo del sistema y entrenar arriba un
 Flujo integrado:
 
 ```bash
-python3 vcpria.py train-stack \
+python3 lsupria.py train-stack \
   --csvs data/S1/landmarks.csv data/S2/landmarks.csv \
   --work-dir runs/demo_stack \
   --cnn-image-col img_raw_path \
@@ -76,7 +76,7 @@ Eso genera:
 1. Recoleccion
 
 ```bash
-python3 vcpria.py collect \
+python3 lsupria.py collect \
   --out data/S1 \
   --subject-id S1 \
   --labels A B C hola gracias si no ayuda
@@ -85,7 +85,7 @@ python3 vcpria.py collect \
 2. Entrenamiento landmarks
 
 ```bash
-python3 vcpria.py train-landmarks \
+python3 lsupria.py train-landmarks \
   --csv data/S1/landmarks.csv \
   --out models/landmarks.joblib
 ```
@@ -93,7 +93,7 @@ python3 vcpria.py train-landmarks \
 3. Entrenamiento CNN
 
 ```bash
-python3 vcpria.py train-cnn \
+python3 lsupria.py train-cnn \
   --csv data/S1/landmarks.csv \
   --image-col img_raw_path \
   --out models/cnn.pt
@@ -102,7 +102,7 @@ python3 vcpria.py train-cnn \
 4. Evaluacion
 
 ```bash
-python3 vcpria.py eval-split \
+python3 lsupria.py eval-split \
   --csv data/S1/landmarks.csv \
   --landmarks-model models/landmarks.joblib \
   --cnn-model models/cnn.pt \
@@ -112,7 +112,7 @@ python3 vcpria.py eval-split \
 5. Demo web
 
 ```bash
-python3 vcpria.py web \
+python3 lsupria.py web \
   --landmarks-model models/landmarks.joblib \
   --cnn-model models/cnn.pt \
   --open-browser
@@ -123,7 +123,7 @@ python3 vcpria.py web \
 1. Descargar
 
 ```bash
-python3 vcpria.py ilsut-download \
+python3 lsupria.py ilsut-download \
   --out-dir data/ilsut_archives \
   --sources source2 source3 \
   --skip-existing
@@ -132,7 +132,7 @@ python3 vcpria.py ilsut-download \
 2. Extraer
 
 ```bash
-python3 vcpria.py ilsut-extract \
+python3 lsupria.py ilsut-extract \
   --archives-dir data/ilsut_archives \
   --out-root data/ilsut_extracted \
   --sources source2 source3 \
@@ -142,7 +142,7 @@ python3 vcpria.py ilsut-extract \
 3. Preparar weak labels + entrenar
 
 ```bash
-python3 vcpria.py ilsut-train \
+python3 lsupria.py ilsut-train \
   --episodes-csv /ABS/PATH/episodes.csv \
   --root data/ilsut_extracted \
   --keywords deliverables/ilsut_keywords.example.json \

@@ -27,6 +27,7 @@ from ..pipelines.cnn import CnnPipeline
 from ..pipelines.landmarks import LandmarksPipeline
 from ..pipelines.multimodal_sequence import MultimodalSequencePipeline
 from ..pipelines.sequence import SequencePipeline
+from ..pipelines.slt import SltPipeline
 from ..tracking import RoiTracker
 from .composer import ComposeConfig, ComposeMode, ComposeState
 from .tts import TtsEngine
@@ -38,7 +39,7 @@ INDEX_HTML = """<!doctype html>
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>VC-pria Web Demo</title>
+    <title>lsu-pria Web Demo</title>
     <style>
       body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 16px; background: #0b1020; color: #e8ecff;}
       .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start;}
@@ -61,7 +62,7 @@ INDEX_HTML = """<!doctype html>
     </style>
   </head>
   <body>
-    <h2>VC-pria — Web demo (infer + frase + TTS)</h2>
+    <h2>lsu-pria — Web demo (infer + frase + TTS)</h2>
     <div class="pill mono muted">session: <span id="sid">(creating...)</span> <button id="copySid">Copy</button> <button id="export">Export JSON</button> <button id="exportCsv">Export CSV</button></div>
     <div class="row">
       <div class="card stack">
@@ -370,6 +371,7 @@ class LoadedPipelines:
     cnn: Optional[CnnPipeline] = None
     sequence: Optional[SequencePipeline] = None
     multimodal: Optional[MultimodalSequencePipeline] = None
+    slt: Optional[SltPipeline] = None
 
     def get(self, name: str) -> object:
         if name == "landmarks":
@@ -388,6 +390,10 @@ class LoadedPipelines:
             if self.multimodal is None:
                 raise HTTPException(status_code=400, detail="multimodal model not loaded")
             return self.multimodal
+        if name == "slt":
+            if self.slt is None:
+                raise HTTPException(status_code=400, detail="slt model not loaded")
+            return self.slt
         raise HTTPException(status_code=400, detail=f"unknown pipeline: {name}")
 
 
@@ -429,6 +435,7 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
         c_count = len(pipelines.cnn.labels) if pipelines.cnn is not None else 0
         s_count = len(pipelines.sequence.labels) if pipelines.sequence is not None else 0
         m_count = len(pipelines.multimodal.labels) if pipelines.multimodal is not None else 0
+        slt_count = len(pipelines.slt.labels) if pipelines.slt is not None else 0
         return {
             "ok": True,
             "pipelines": {
@@ -436,8 +443,9 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
                 "cnn": pipelines.cnn is not None,
                 "sequence": pipelines.sequence is not None,
                 "multimodal": pipelines.multimodal is not None,
+                "slt": pipelines.slt is not None,
             },
-            "classes_count": {"landmarks": l_count, "cnn": c_count, "sequence": s_count, "multimodal": m_count},
+            "classes_count": {"landmarks": l_count, "cnn": c_count, "sequence": s_count, "multimodal": m_count, "slt": slt_count},
             "tools": tools_status(),
         }
 
@@ -452,6 +460,8 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
             out["sequence"] = list(pipelines.sequence.labels)
         if pipelines.multimodal is not None:
             out["multimodal"] = list(pipelines.multimodal.labels)
+        if pipelines.slt is not None:
+            out["slt"] = list(pipelines.slt.labels)
         return {"classes": out}
 
     @api.post("/session/new")
@@ -650,6 +660,8 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
         frame_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
         if frame_bgr is None:
             raise HTTPException(status_code=400, detail="bad image")
+        if pipeline == "slt":
+            raise HTTPException(status_code=400, detail="slt is only available for offline video analysis in this phase")
 
         work = frame_bgr
         if preprocess == "1":
@@ -848,6 +860,7 @@ def main() -> None:
     ap.add_argument("--cnn-model", type=str, default="")
     ap.add_argument("--sequence-model", type=str, default="")
     ap.add_argument("--multimodal-model", type=str, default="")
+    ap.add_argument("--slt-model", type=str, default="")
     ap.add_argument("--host", type=str, default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--open-browser", action="store_true", help="Open the app URL in the default browser")
@@ -868,6 +881,8 @@ def main() -> None:
         pipelines.sequence = SequencePipeline.load(Path(args.sequence_model))
     if args.multimodal_model:
         pipelines.multimodal = MultimodalSequencePipeline.load(Path(args.multimodal_model))
+    if args.slt_model:
+        pipelines.slt = SltPipeline.load(Path(args.slt_model))
 
     import uvicorn
 

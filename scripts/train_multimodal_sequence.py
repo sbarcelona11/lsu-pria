@@ -14,7 +14,7 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
-from vc_pria.features import extract_multimodal_frame_features
+from lsu_pria.features import extract_multimodal_frame_features
 
 
 def parse_args() -> argparse.Namespace:

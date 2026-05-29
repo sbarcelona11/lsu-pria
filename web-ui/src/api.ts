@@ -1,4 +1,4 @@
-export type PipelineName = "landmarks" | "cnn" | "sequence" | "multimodal";
+export type PipelineName = "landmarks" | "cnn" | "sequence" | "multimodal" | "slt";
 export type ComposeMode = "both" | "words" | "spelling";
 export type MaskSpace = "ycrcb" | "hsv";
 

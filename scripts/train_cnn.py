@@ -16,7 +16,7 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
-from vc_pria.train_cnn_model import build_model
+from lsu_pria.train_cnn_model import build_model
 
 
 def parse_args() -> argparse.Namespace:

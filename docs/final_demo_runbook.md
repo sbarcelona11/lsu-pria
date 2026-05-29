@@ -5,7 +5,7 @@ Objetivo: tener una secuencia corta y repetible para el dia de la presentacion.
 ## 1. Entrenar el stack local
 
 ```bash
-python3 vcpria.py train-stack \
+python3 lsupria.py train-stack \
   --csvs data/S1/landmarks.csv data/S2/landmarks.csv \
   --work-dir runs/demo_stack \
   --cnn-image-col img_raw_path \
@@ -22,18 +22,20 @@ Salida importante:
 ## 2. Levantar la demo web con esos modelos
 
 ```bash
-python3 vcpria.py demo-stack-web \
+python3 lsupria.py demo-stack-web \
   --work-dir runs/demo_stack \
   --open-browser
 ```
 
 Si `runs/demo_stack/models/multimodal_sequence.joblib` existe, la web habilita tambien el pipeline `multimodal`.
+Si levantan la web con `--slt-model`, la seccion de analisis de video tambien habilita `slt` para traduccion offline.
 
 ## 3. Mostrar durante el pitch
 
 - La webcam en vivo.
 - El overlay de landmarks y bbox.
 - El cambio entre `landmarks`, `cnn` y `multimodal` si lo tienen entrenado.
+- Si quieren mostrar traduccion por clip completo, usar la seccion de video con `slt`.
 - La composicion de frase.
 - Export de CSV/JSON si quieren mostrar trazabilidad.
 
@@ -49,7 +51,7 @@ Usar:
 Si descargan videos de referencia y quieren medir si la app compone bien la frase:
 
 ```bash
-python3 vcpria.py validate-videos \
+python3 lsupria.py validate-videos \
   --pipeline cnn \
   --cnn-model runs/demo_stack/models/cnn.pt \
   --cases-json deliverables/youtube_validation_cases.example.json \
@@ -67,7 +69,7 @@ Salida:
 Si quieren validar el baseline multimodal:
 
 ```bash
-python3 vcpria.py validate-videos \
+python3 lsupria.py validate-videos \
   --pipeline multimodal \
   --multimodal-model runs/mm_stack/models/multimodal_sequence.joblib \
   --cases-json deliverables/youtube_validation_cases.example.json \
@@ -80,10 +82,11 @@ python3 vcpria.py validate-videos \
 Y para decidir cuál mostrar en el pitch:
 
 ```bash
-python3 vcpria.py compare-video-pipelines \
-  --pipelines cnn multimodal \
+python3 lsupria.py compare-video-pipelines \
+  --pipelines cnn multimodal slt \
   --cnn-model runs/demo_stack/models/cnn.pt \
   --multimodal-model runs/mm_stack/models/multimodal_sequence.joblib \
+  --slt-model runs/ilsut_slt_train_s2s3/models/slt_proxy.joblib \
   --cases-json deliverables/youtube_validation_cases.example.json \
   --out-dir runs/model_compare \
   --mode both \
@@ -94,22 +97,24 @@ python3 vcpria.py compare-video-pipelines \
 Y para convertir esa comparación en una recomendación operativa:
 
 ```bash
-python3 vcpria.py recommend-demo-pipeline \
+python3 lsupria.py recommend-demo-pipeline \
   --compare-json runs/model_compare/compare_video_pipelines.json \
   --out-dir runs/model_compare/recommendation \
   --cnn-model runs/demo_stack/models/cnn.pt \
   --multimodal-model runs/mm_stack/models/multimodal_sequence.joblib \
+  --slt-model runs/ilsut_slt_train_s2s3/models/slt_proxy.joblib \
   --cases-json deliverables/youtube_validation_cases.example.json
 ```
 
 Si ya tienen workspaces entrenados y quieren resolver todo de una:
 
 ```bash
-python3 vcpria.py finalize-demo-selection \
+python3 lsupria.py finalize-demo-selection \
   --out-dir runs/final_demo_selection \
   --cases-json deliverables/youtube_validation_cases.example.json \
   --frame-work-dir runs/demo_stack \
   --multimodal-work-dir runs/mm_stack \
+  --slt-work-dir runs/ilsut_slt_train_s2s3 \
   --preprocess \
   --use-tracker
 ```
@@ -117,7 +122,7 @@ python3 vcpria.py finalize-demo-selection \
 Y si el entrenamiento final sale directamente desde videos etiquetados:
 
 ```bash
-python3 vcpria.py train-videos-mm-stack \
+python3 lsupria.py train-videos-mm-stack \
   --videos-root data/train_videos \
   --work-dir runs/mm_from_videos \
   --layout label \
@@ -129,7 +134,7 @@ python3 vcpria.py train-videos-mm-stack \
 Regenerar entregables finales:
 
 ```bash
-python3 vcpria.py deliverables \
+python3 lsupria.py deliverables \
   --set-group "Grupo X" \
   --set-members "Integrante 1" "Integrante 2" \
   --set-date 2026-05-28

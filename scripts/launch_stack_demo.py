@@ -29,7 +29,8 @@ def main() -> None:
     cnn_model = models_dir / "cnn.pt"
     sequence_model = models_dir / "sequence.joblib"
     multimodal_model = models_dir / "multimodal_sequence.joblib"
-    if not any(p.exists() for p in (landmarks_model, cnn_model, sequence_model, multimodal_model)):
+    slt_model = models_dir / "slt_proxy.joblib"
+    if not any(p.exists() for p in (landmarks_model, cnn_model, sequence_model, multimodal_model, slt_model)):
         raise SystemExit(f"No known models found under: {models_dir}")
 
     cmd = [
@@ -48,6 +49,8 @@ def main() -> None:
         cmd += ["--sequence-model", str(sequence_model)]
     if multimodal_model.exists():
         cmd += ["--multimodal-model", str(multimodal_model)]
+    if slt_model.exists():
+        cmd += ["--slt-model", str(slt_model)]
     if args.open_browser:
         cmd.append("--open-browser")
 

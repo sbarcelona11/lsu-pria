@@ -23,6 +23,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--results-fig", default="results/precision_vs_fps.png")
     p.add_argument("--ablation-table", default="results/ablation_table.md")
     p.add_argument("--dataset-stats", default="results/dataset_stats.md")
+    p.add_argument("--slt-report-section", default="")
+    p.add_argument("--slt-pitch-section", default="")
     return p.parse_args()
 
 
@@ -36,7 +38,7 @@ def _apply_placeholders(md: str, cfg: dict) -> str:
     else:
         members_s = str(members)
     mapping = {
-        "{{TITLE}}": str(cfg.get("title", "VC-pria")),
+        "{{TITLE}}": str(cfg.get("title", "lsu-pria")),
         "{{COURSE}}": str(cfg.get("course", "")),
         "{{GROUP}}": str(cfg.get("group", "")),
         "{{MEMBERS}}": members_s,
@@ -46,6 +48,12 @@ def _apply_placeholders(md: str, cfg: dict) -> str:
     out = md
     for k, v in mapping.items():
         out = out.replace(k, v)
+    return out
+
+
+def _apply_optional_sections(md: str, report_section: str, pitch_section: str) -> str:
+    out = md.replace("{{SLT_REPORT_SECTION}}", report_section)
+    out = out.replace("{{SLT_PITCH_SECTION}}", pitch_section)
     return out
 
 
@@ -236,7 +244,7 @@ def render_pitch(md_path: Path, out_pdf: Path) -> None:
         pdf.set_text_color(160, 166, 198)
         pdf.set_font("Helvetica", size=11)
         pdf.set_xy(12, 182)
-        pdf.cell(0, 6, _sanitize_pdf_text("VC-pria — Pitch"), align="L")
+        pdf.cell(0, 6, _sanitize_pdf_text("lsu-pria — Pitch"), align="L")
         pdf.set_xy(12, 182)
         pdf.cell(314.7, 6, f"{idx}/{total}", align="R")
 
@@ -268,10 +276,14 @@ def main() -> None:
 
     cfg_path = Path(args.config)
     cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
+    slt_report_section = _read(Path(args.slt_report_section)).strip() if args.slt_report_section and Path(args.slt_report_section).exists() else ""
+    slt_pitch_section = _read(Path(args.slt_pitch_section)).strip() if args.slt_pitch_section and Path(args.slt_pitch_section).exists() else ""
 
     # Auto-append artifacts if present.
     report_md = _apply_placeholders(_read(Path(args.report_md)), cfg)
     pitch_md = _apply_placeholders(_read(Path(args.pitch_md)), cfg)
+    report_md = _apply_optional_sections(report_md, slt_report_section, slt_pitch_section)
+    pitch_md = _apply_optional_sections(pitch_md, slt_report_section, slt_pitch_section)
     ablation = Path(args.ablation_table)
     ds = Path(args.dataset_stats)
     if ablation.exists():

@@ -51,7 +51,7 @@ def main() -> None:
 
     out_md.parent.mkdir(parents=True, exist_ok=True)
     out = []
-    out.append("# VC-pria — Reporte rápido\n")
+    out.append("# lsu-pria — Reporte rápido\n")
     out.append("## Dataset\n")
     if dataset_stats_md:
         out.append(dataset_stats_md + "\n")

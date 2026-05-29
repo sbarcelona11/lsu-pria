@@ -21,6 +21,7 @@ from ..multimodal import HolisticDetector, multimodal_bbox, multimodal_primary_h
 from ..opencv_utils import SkinMaskConfig, apply_clahe, maybe_denoise, skin_mask_hsv, skin_mask_ycrcb
 from ..pipelines.multimodal_sequence import MultimodalSequencePipeline
 from ..pipelines.sequence import SequencePipeline
+from ..pipelines.slt import SltPipeline
 from ..tracking import RoiTracker
 from .composer import ComposeConfig, ComposeMode, ComposeState
 
@@ -153,6 +154,8 @@ def load_video_pipeline(pipelines, pipeline_name: str):
         base = pipelines.sequence
     elif pipeline_name == "multimodal":
         base = pipelines.multimodal
+    elif pipeline_name == "slt":
+        base = pipelines.slt
     else:
         raise ValueError(f"unknown pipeline: {pipeline_name}")
     if base is None:
@@ -219,6 +222,64 @@ def analyze_video(
     config: VideoAnalysisConfig,
     output_video_path: Optional[Path] = None,
 ) -> dict:
+    if config.pipeline_name == "slt":
+        if not isinstance(pipeline, SltPipeline):
+            raise RuntimeError("SLT pipeline not loaded")
+        started = time.perf_counter()
+        pred = pipeline.predict_video_file(
+            video_path,
+            sample_fps=float(config.sample_fps) if config.sample_fps > 0 else None,
+            max_frames=int(config.max_frames) if config.max_frames > 0 else None,
+            preprocess=bool(config.preprocess),
+        )
+        cap_render = cv2.VideoCapture(str(video_path))
+        writer = None
+        try:
+            if output_video_path is not None and cap_render.isOpened():
+                width = int(cap_render.get(cv2.CAP_PROP_FRAME_WIDTH) or 640)
+                height = int(cap_render.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
+                fps = float(cap_render.get(cv2.CAP_PROP_FPS) or 25.0)
+                output_video_path.parent.mkdir(parents=True, exist_ok=True)
+                writer = cv2.VideoWriter(str(output_video_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+                while True:
+                    ok, frame_bgr = cap_render.read()
+                    if not ok or frame_bgr is None:
+                        break
+                    rendered = frame_bgr.copy()
+                    cv2.putText(rendered, f"SLT: {pred.text or '(sin texto)'}", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (10, 10, 10), 3, cv2.LINE_AA)
+                    cv2.putText(rendered, f"SLT: {pred.text or '(sin texto)'}", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (240, 245, 255), 1, cv2.LINE_AA)
+                    cv2.putText(rendered, f"conf={pred.confidence:.2f}", (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (10, 10, 10), 3, cv2.LINE_AA)
+                    cv2.putText(rendered, f"conf={pred.confidence:.2f}", (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (200, 240, 200), 1, cv2.LINE_AA)
+                    writer.write(rendered)
+        finally:
+            cap_render.release()
+            if writer is not None:
+                writer.release()
+        elapsed_s = max(1e-6, time.perf_counter() - started)
+        return {
+            "video_path": str(video_path),
+            "predicted_text": pred.text,
+            "predicted_tokens": pred.token_sequence,
+            "frames_total": pred.frames_total,
+            "frames_used": pred.frames_used,
+            "predictions_count": 1 if pred.text else 0,
+            "avg_confidence": float(pred.confidence),
+            "tracker_status_last": "off",
+            "elapsed_s": elapsed_s,
+            "effective_fps": pred.frames_used / elapsed_s if elapsed_s > 0 else 0.0,
+            "config": asdict(config),
+            "log": [
+                {
+                    "ts_ms": 0,
+                    "label": pred.text,
+                    "confidence": float(pred.confidence),
+                    "no_hand": False,
+                    "tracker_status": "off",
+                    "new_token": pred.text,
+                }
+            ],
+        }
+
     holistic = HolisticDetector()
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import cv2
 
-from vc_pria.demo import DemoRunner
+from lsu_pria.demo import DemoRunner
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,7 +43,7 @@ def main() -> None:
         last_frame_t = now
 
         out_bgr = runner.process_frame(frame_bgr, dt=dt)
-        cv2.imshow("VC-pria demo", out_bgr)
+        cv2.imshow("lsu-pria demo", out_bgr)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):

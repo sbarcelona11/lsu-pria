@@ -189,13 +189,35 @@ def main() -> None:
     for split_name in ("train", "val", "test"):
         df[df["split"] == split_name].to_csv(work_dir / f"{split_name}.csv", index=False)
 
+    split_group_counts = {}
+    if "group_id" in df.columns:
+        split_group_counts = {
+            str(split_name): int(part["group_id"].astype(str).nunique())
+            for split_name, part in df.groupby("split")
+        }
     summary = {
         "sources": list(args.sources or []),
         "rows": int(len(df)),
         "labels": sorted(df["label"].astype(str).unique().tolist()),
         "split_counts": {k: int(v) for k, v in df["split"].value_counts().to_dict().items()},
+        "split_episode_counts": split_group_counts,
         "label_counts": {str(k): int(v) for k, v in df["label"].value_counts().to_dict().items()},
         "episodes": int(df["group_id"].astype(str).nunique()) if "group_id" in df.columns else None,
+        "config": {
+            "episodes_csv": str(episodes_csv),
+            "root": str(args.root),
+            "keywords": str(args.keywords),
+            "path_mode": str(args.path_mode),
+            "manifest_limit": int(args.manifest_limit),
+            "min_label_count": int(args.min_label_count),
+            "labels_json": str(args.labels_json or ""),
+            "test_size": float(args.test_size),
+            "val_size": float(args.val_size),
+            "seed": int(args.seed),
+            "export_clips": bool(args.export_clips),
+            "clip_ext": str(args.clip_ext),
+            "max_clips": int(args.max_clips),
+        },
     }
     (work_dir / "subset_info.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 

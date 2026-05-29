@@ -14,8 +14,8 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
-from vc_pria.features import extract_landmark_features
-from vc_pria.train_cnn_model import build_model
+from lsu_pria.features import extract_landmark_features
+from lsu_pria.train_cnn_model import build_model
 
 
 def _load_landmarks_tensor(df: pd.DataFrame) -> np.ndarray:

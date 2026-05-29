@@ -19,7 +19,7 @@ def _run(args: list[str]) -> int:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="vcpria")
+    p = argparse.ArgumentParser(prog="lsupria")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("web", help="Run FastAPI web demo")
@@ -27,6 +27,7 @@ def main() -> None:
     sp.add_argument("--cnn-model", default="")
     sp.add_argument("--sequence-model", default="")
     sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--slt-model", default="")
     sp.add_argument("--host", default="127.0.0.1")
     sp.add_argument("--port", default="8000")
     sp.add_argument("--open-browser", action="store_true")
@@ -36,6 +37,7 @@ def main() -> None:
     sp.add_argument("--cnn-model", default="")
     sp.add_argument("--sequence-model", default="")
     sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--slt-model", default="")
     sp.add_argument("--stack-work-dir", default="")
     sp.add_argument("--api-host", default="127.0.0.1")
     sp.add_argument("--api-port", default="8000")
@@ -264,12 +266,98 @@ def main() -> None:
     sp.add_argument("--manifest-limit", default="0")
     sp.add_argument("--top-k", default="10")
 
+    sp = sub.add_parser("ilsut-extract-slt-features", help="Extract clip-level multimodal SLT features from a prepared iLSU-T subset")
+    sp.add_argument("--subset-dir", required=True)
+    sp.add_argument("--out-dir", required=True)
+    sp.add_argument("--sample-fps", default="6.0")
+    sp.add_argument("--max-frames", default="0")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--splits", nargs="*", default=["train", "val", "test"])
+    sp.add_argument("--limit", default="0")
+
+    sp = sub.add_parser("ilsut-export-slt-dataset", help="Export a prepared iLSU-T subset as an SLT dataset package")
+    sp.add_argument("--subset-dir", required=True)
+    sp.add_argument("--out-dir", required=True)
+    sp.add_argument("--mode", choices=["features", "raw"], default="features")
+    sp.add_argument("--sample-fps", default="6.0")
+    sp.add_argument("--max-frames", default="0")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
+    sp.add_argument("--max-clips", default="0")
+    sp.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
+    sp.add_argument("--limit", default="0")
+
+    sp = sub.add_parser("train-ilsut-slt", help="Train the SLT wrapper package and a local proxy baseline")
+    sp.add_argument("--subset-dir", required=True)
+    sp.add_argument("--out-dir", required=True)
+    sp.add_argument("--dataset-dir", default="")
+    sp.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
+    sp.add_argument("--backend-repo", default="")
+    sp.add_argument("--config-base", default="")
+    sp.add_argument("--epochs", default="10")
+    sp.add_argument("--batch-size", default="16")
+    sp.add_argument("--device", default="cpu")
+    sp.add_argument("--seed", default="42")
+    sp.add_argument("--sample-fps", default="6.0")
+    sp.add_argument("--max-frames", default="0")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--run-backend", action="store_true")
+
+    sp = sub.add_parser("eval-ilsut-slt", help="Evaluate an SLT model bundle on an exported iLSU-T test split")
+    sp.add_argument("--dataset-dir", required=True)
+    sp.add_argument("--model", required=True)
+    sp.add_argument("--json-out", required=True)
+    sp.add_argument("--md-out", default="")
+    sp.add_argument("--landmarks-eval-json", default="")
+    sp.add_argument("--cnn-eval-json", default="")
+    sp.add_argument("--multimodal-eval-json", default="")
+
+    sp = sub.add_parser("validate-ilsut-slt-dataset", help="Validate an exported iLSU-T SLT dataset package")
+    sp.add_argument("--dataset-dir", required=True)
+    sp.add_argument("--json-out", default="")
+    sp.add_argument("--md-out", default="")
+    sp.add_argument("--require-features", action="store_true")
+
+    sp = sub.add_parser("run-ilsut-slt-pipeline", help="Run support -> subset -> export -> validate -> train -> eval for iLSU-T SLT")
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--keywords", default="deliverables/ilsut_keywords.focused.json")
+    sp.add_argument("--sources", nargs="+", default=["source2", "source3"])
+    sp.add_argument("--work-root", default="runs/ilsut_slt_pipeline")
+    sp.add_argument("--preset", choices=["custom", "quick", "standard"], default="custom")
+    sp.add_argument("--episodes-csv", default="auto")
+    sp.add_argument("--path-mode", choices=["auto", "relative", "filename"], default="auto")
+    sp.add_argument("--manifest-limit", default="0")
+    sp.add_argument("--min-label-count", default="20")
+    sp.add_argument("--labels-json", default="")
+    sp.add_argument("--sample-fps", default="6")
+    sp.add_argument("--max-frames", default="48")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
+    sp.add_argument("--max-clips", default="0")
+    sp.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
+    sp.add_argument("--backend-repo", default="")
+    sp.add_argument("--config-base", default="")
+    sp.add_argument("--epochs", default="10")
+    sp.add_argument("--batch-size", default="16")
+    sp.add_argument("--device", default="cpu")
+    sp.add_argument("--seed", default="42")
+    sp.add_argument("--run-backend", action="store_true")
+
+    sp = sub.add_parser("render-ilsut-slt-summary", help="Render report-friendly artifacts from an iLSU-T SLT summary.json")
+    sp.add_argument("--summary-json", required=True)
+    sp.add_argument("--out-dir", required=True)
+
+    sp = sub.add_parser("render-ilsut-slt-sections", help="Render markdown sections for report/pitch from an iLSU-T SLT summary.json")
+    sp.add_argument("--summary-json", required=True)
+    sp.add_argument("--out-dir", required=True)
+
     sp = sub.add_parser("validate-videos", help="Run the recognition pipeline over validation videos")
-    sp.add_argument("--pipeline", choices=["landmarks", "cnn", "sequence", "multimodal"], default="landmarks")
+    sp.add_argument("--pipeline", choices=["landmarks", "cnn", "sequence", "multimodal", "slt"], default="landmarks")
     sp.add_argument("--landmarks-model", default="")
     sp.add_argument("--cnn-model", default="")
     sp.add_argument("--sequence-model", default="")
     sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--slt-model", default="")
     sp.add_argument("--videos", nargs="*", default=None)
     sp.add_argument("--cases-json", default="")
     sp.add_argument("--out-dir", required=True)
@@ -285,11 +373,12 @@ def main() -> None:
     sp.add_argument("--sample-fps", default="0")
 
     sp = sub.add_parser("compare-video-pipelines", help="Compare multiple pipelines over the same validation videos")
-    sp.add_argument("--pipelines", nargs="+", choices=["landmarks", "cnn", "sequence", "multimodal"], required=True)
+    sp.add_argument("--pipelines", nargs="+", choices=["landmarks", "cnn", "sequence", "multimodal", "slt"], required=True)
     sp.add_argument("--landmarks-model", default="")
     sp.add_argument("--cnn-model", default="")
     sp.add_argument("--sequence-model", default="")
     sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--slt-model", default="")
     sp.add_argument("--videos", nargs="*", default=None)
     sp.add_argument("--cases-json", default="")
     sp.add_argument("--out-dir", required=True)
@@ -313,6 +402,7 @@ def main() -> None:
     sp.add_argument("--cnn-model", default="")
     sp.add_argument("--sequence-model", default="")
     sp.add_argument("--multimodal-model", default="")
+    sp.add_argument("--slt-model", default="")
     sp.add_argument("--cases-json", default="")
 
     sp = sub.add_parser("finalize-demo-selection", help="Run comparison + recommendation for the final demo in one shot")
@@ -321,11 +411,13 @@ def main() -> None:
     sp.add_argument("--videos", nargs="*", default=None)
     sp.add_argument("--frame-work-dir", default="")
     sp.add_argument("--multimodal-work-dir", default="")
+    sp.add_argument("--slt-work-dir", default="")
     sp.add_argument("--landmarks-model", default="")
     sp.add_argument("--cnn-model", default="")
     sp.add_argument("--sequence-model", default="")
     sp.add_argument("--multimodal-model", default="")
-    sp.add_argument("--pipelines", nargs="*", choices=["landmarks", "cnn", "sequence", "multimodal"], default=None)
+    sp.add_argument("--slt-model", default="")
+    sp.add_argument("--pipelines", nargs="*", choices=["landmarks", "cnn", "sequence", "multimodal", "slt"], default=None)
     sp.add_argument("--mode", choices=["both", "words", "spelling"], default="both")
     sp.add_argument("--preprocess", action="store_true")
     sp.add_argument("--skin-mask", action="store_true")
@@ -402,6 +494,9 @@ def main() -> None:
     sp.add_argument("--set-date", default="")
     sp.add_argument("--set-pitch-minutes", default="0")
     sp.add_argument("--set-members", nargs="*", default=None)
+    sp.add_argument("--slt-summary-json", default="")
+    sp.add_argument("--slt-report-section", default="")
+    sp.add_argument("--slt-pitch-section", default="")
 
     args = p.parse_args()
     repo = _repo_root()
@@ -424,6 +519,10 @@ def main() -> None:
             cmd += ["--sequence-model", args.sequence_model]
         if args.multimodal_model:
             cmd += ["--multimodal-model", args.multimodal_model]
+        if args.slt_model:
+            cmd += ["--slt-model", args.slt_model]
+        if args.slt_model:
+            cmd += ["--slt-model", args.slt_model]
         if args.open_browser:
             cmd += ["--open-browser"]
         raise SystemExit(_run(cmd))
@@ -447,6 +546,10 @@ def main() -> None:
             cmd += ["--sequence-model", args.sequence_model]
         if args.multimodal_model:
             cmd += ["--multimodal-model", args.multimodal_model]
+        if args.slt_model:
+            cmd += ["--slt-model", args.slt_model]
+        if args.slt_model:
+            cmd += ["--slt-model", args.slt_model]
         if args.stack_work_dir:
             cmd += ["--stack-work-dir", args.stack_work_dir]
         if args.install_ui:
@@ -960,6 +1063,200 @@ def main() -> None:
             cmd += ["--sources", *args.sources]
         raise SystemExit(_run(cmd))
 
+    if args.cmd == "ilsut-extract-slt-features":
+        cmd = [
+            py,
+            str(repo / "scripts" / "extract_ilsut_slt_features.py"),
+            "--subset-dir",
+            args.subset_dir,
+            "--out-dir",
+            args.out_dir,
+            "--sample-fps",
+            args.sample_fps,
+            "--max-frames",
+            args.max_frames,
+            "--limit",
+            args.limit,
+        ]
+        if args.splits:
+            cmd += ["--splits", *args.splits]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "ilsut-export-slt-dataset":
+        cmd = [
+            py,
+            str(repo / "scripts" / "export_ilsut_slt_dataset.py"),
+            "--subset-dir",
+            args.subset_dir,
+            "--out-dir",
+            args.out_dir,
+            "--mode",
+            args.mode,
+            "--sample-fps",
+            args.sample_fps,
+            "--max-frames",
+            args.max_frames,
+            "--clip-ext",
+            args.clip_ext,
+            "--max-clips",
+            args.max_clips,
+            "--backend",
+            args.backend,
+            "--limit",
+            args.limit,
+        ]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "train-ilsut-slt":
+        cmd = [
+            py,
+            str(repo / "scripts" / "train_ilsut_slt.py"),
+            "--subset-dir",
+            args.subset_dir,
+            "--out-dir",
+            args.out_dir,
+            "--dataset-dir",
+            args.dataset_dir,
+            "--backend",
+            args.backend,
+            "--backend-repo",
+            args.backend_repo,
+            "--config-base",
+            args.config_base,
+            "--epochs",
+            args.epochs,
+            "--batch-size",
+            args.batch_size,
+            "--device",
+            args.device,
+            "--seed",
+            args.seed,
+            "--sample-fps",
+            args.sample_fps,
+            "--max-frames",
+            args.max_frames,
+        ]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        if args.run_backend:
+            cmd.append("--run-backend")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "eval-ilsut-slt":
+        cmd = [
+            py,
+            str(repo / "scripts" / "eval_ilsut_slt.py"),
+            "--dataset-dir",
+            args.dataset_dir,
+            "--model",
+            args.model,
+            "--json-out",
+            args.json_out,
+            "--md-out",
+            args.md_out,
+            "--landmarks-eval-json",
+            args.landmarks_eval_json,
+            "--cnn-eval-json",
+            args.cnn_eval_json,
+            "--multimodal-eval-json",
+            args.multimodal_eval_json,
+        ]
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "validate-ilsut-slt-dataset":
+        cmd = [
+            py,
+            str(repo / "scripts" / "validate_ilsut_slt_dataset.py"),
+            "--dataset-dir",
+            args.dataset_dir,
+        ]
+        if args.json_out:
+            cmd += ["--json-out", args.json_out]
+        if args.md_out:
+            cmd += ["--md-out", args.md_out]
+        if args.require_features:
+            cmd.append("--require-features")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "run-ilsut-slt-pipeline":
+        cmd = [
+            py,
+            str(repo / "scripts" / "run_ilsut_slt_pipeline.py"),
+            "--root",
+            args.root,
+            "--keywords",
+            args.keywords,
+            "--work-root",
+            args.work_root,
+            "--preset",
+            args.preset,
+            "--episodes-csv",
+            args.episodes_csv,
+            "--path-mode",
+            args.path_mode,
+            "--manifest-limit",
+            args.manifest_limit,
+            "--min-label-count",
+            args.min_label_count,
+            "--labels-json",
+            args.labels_json,
+            "--sample-fps",
+            args.sample_fps,
+            "--max-frames",
+            args.max_frames,
+            "--clip-ext",
+            args.clip_ext,
+            "--max-clips",
+            args.max_clips,
+            "--backend",
+            args.backend,
+            "--backend-repo",
+            args.backend_repo,
+            "--config-base",
+            args.config_base,
+            "--epochs",
+            args.epochs,
+            "--batch-size",
+            args.batch_size,
+            "--device",
+            args.device,
+            "--seed",
+            args.seed,
+            "--sources",
+            *args.sources,
+        ]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        if args.run_backend:
+            cmd.append("--run-backend")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "render-ilsut-slt-summary":
+        cmd = [
+            py,
+            str(repo / "scripts" / "render_ilsut_slt_summary.py"),
+            "--summary-json",
+            args.summary_json,
+            "--out-dir",
+            args.out_dir,
+        ]
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "render-ilsut-slt-sections":
+        cmd = [
+            py,
+            str(repo / "scripts" / "render_ilsut_slt_sections.py"),
+            "--summary-json",
+            args.summary_json,
+            "--out-dir",
+            args.out_dir,
+        ]
+        raise SystemExit(_run(cmd))
+
     if args.cmd == "validate-videos":
         cmd = [
             py,
@@ -991,6 +1288,8 @@ def main() -> None:
             cmd += ["--sequence-model", args.sequence_model]
         if args.multimodal_model:
             cmd += ["--multimodal-model", args.multimodal_model]
+        if args.slt_model:
+            cmd += ["--slt-model", args.slt_model]
         if args.videos:
             cmd += ["--videos", *args.videos]
         if args.cases_json:
@@ -1034,6 +1333,8 @@ def main() -> None:
             cmd += ["--sequence-model", args.sequence_model]
         if args.multimodal_model:
             cmd += ["--multimodal-model", args.multimodal_model]
+        if args.slt_model:
+            cmd += ["--slt-model", args.slt_model]
         if args.videos:
             cmd += ["--videos", *args.videos]
         if args.cases_json:
@@ -1067,6 +1368,8 @@ def main() -> None:
             cmd += ["--sequence-model", args.sequence_model]
         if args.multimodal_model:
             cmd += ["--multimodal-model", args.multimodal_model]
+        if args.slt_model:
+            cmd += ["--slt-model", args.slt_model]
         if args.cases_json:
             cmd += ["--cases-json", args.cases_json]
         raise SystemExit(_run(cmd))
@@ -1104,6 +1407,8 @@ def main() -> None:
             cmd += ["--frame-work-dir", args.frame_work_dir]
         if args.multimodal_work_dir:
             cmd += ["--multimodal-work-dir", args.multimodal_work_dir]
+        if args.slt_work_dir:
+            cmd += ["--slt-work-dir", args.slt_work_dir]
         if args.landmarks_model:
             cmd += ["--landmarks-model", args.landmarks_model]
         if args.cnn_model:
@@ -1112,6 +1417,8 @@ def main() -> None:
             cmd += ["--sequence-model", args.sequence_model]
         if args.multimodal_model:
             cmd += ["--multimodal-model", args.multimodal_model]
+        if args.slt_model:
+            cmd += ["--slt-model", args.slt_model]
         if args.pipelines:
             cmd += ["--pipelines", *args.pipelines]
         if args.preprocess:
@@ -1267,7 +1574,29 @@ def main() -> None:
             if rc0 != 0:
                 raise SystemExit(rc0)
 
+        slt_report_section = args.slt_report_section
+        slt_pitch_section = args.slt_pitch_section
+        if args.slt_summary_json:
+            slt_sections_dir = repo / "deliverables" / "out" / "_slt_sections"
+            cmd_sections = [
+                py,
+                str(repo / "scripts" / "render_ilsut_slt_sections.py"),
+                "--summary-json",
+                args.slt_summary_json,
+                "--out-dir",
+                str(slt_sections_dir),
+            ]
+            rc_sections = _run(cmd_sections)
+            if rc_sections != 0:
+                raise SystemExit(rc_sections)
+            slt_report_section = str(slt_sections_dir / "report_results_section.md")
+            slt_pitch_section = str(slt_sections_dir / "pitch_results_section.md")
+
         cmd1 = [py, str(repo / "scripts" / "build_deliverables.py"), "--config", args.config]
+        if slt_report_section:
+            cmd1 += ["--slt-report-section", slt_report_section]
+        if slt_pitch_section:
+            cmd1 += ["--slt-pitch-section", slt_pitch_section]
         rc1 = _run(cmd1)
         if rc1 != 0:
             raise SystemExit(rc1)

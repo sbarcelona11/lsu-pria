@@ -10,9 +10,9 @@ def ensure_repo_root_on_path() -> None:
     """
     repo_root = Path(__file__).resolve().parents[1]
     src_root = repo_root / "src"
-    # Prefer src-root for importing vc_pria package.
+    # Prefer src-root for importing lsu_pria package.
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    # Keep repo-root too (for vcpria.py/webapp.py imports when running from repo).
+    # Keep repo-root too (for lsupria.py/webapp.py imports when running from repo).
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))

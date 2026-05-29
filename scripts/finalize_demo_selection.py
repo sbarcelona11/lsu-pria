@@ -17,11 +17,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--videos", nargs="*", default=None)
     p.add_argument("--frame-work-dir", default="", help="Workspace with models/landmarks.joblib, cnn.pt, sequence.joblib")
     p.add_argument("--multimodal-work-dir", default="", help="Workspace with models/multimodal_sequence.joblib")
+    p.add_argument("--slt-work-dir", default="", help="Workspace with models/slt_proxy.joblib")
     p.add_argument("--landmarks-model", default="")
     p.add_argument("--cnn-model", default="")
     p.add_argument("--sequence-model", default="")
     p.add_argument("--multimodal-model", default="")
-    p.add_argument("--pipelines", nargs="*", choices=["landmarks", "cnn", "sequence", "multimodal"], default=None)
+    p.add_argument("--slt-model", default="")
+    p.add_argument("--pipelines", nargs="*", choices=["landmarks", "cnn", "sequence", "multimodal", "slt"], default=None)
     p.add_argument("--mode", choices=["both", "words", "spelling"], default="both")
     p.add_argument("--preprocess", action="store_true")
     p.add_argument("--skin-mask", action="store_true")
@@ -62,6 +64,7 @@ def main() -> None:
     cnn_model = args.cnn_model or _pick_model(args.frame_work_dir, "cnn.pt")
     sequence_model = args.sequence_model or _pick_model(args.frame_work_dir, "sequence.joblib")
     multimodal_model = args.multimodal_model or _pick_model(args.multimodal_work_dir, "multimodal_sequence.joblib")
+    slt_model = args.slt_model or _pick_model(args.slt_work_dir, "slt_proxy.joblib")
 
     pipelines = list(args.pipelines or [])
     if not pipelines:
@@ -73,6 +76,8 @@ def main() -> None:
             pipelines.append("sequence")
         if multimodal_model:
             pipelines.append("multimodal")
+        if slt_model:
+            pipelines.append("slt")
     if not pipelines:
         raise SystemExit("No pipelines available. Provide model paths or work dirs.")
 
@@ -107,6 +112,8 @@ def main() -> None:
         compare_cmd += ["--sequence-model", sequence_model]
     if multimodal_model:
         compare_cmd += ["--multimodal-model", multimodal_model]
+    if slt_model:
+        compare_cmd += ["--slt-model", slt_model]
     if args.cases_json:
         compare_cmd += ["--cases-json", args.cases_json]
     if args.videos:
@@ -140,6 +147,8 @@ def main() -> None:
         recommend_cmd += ["--sequence-model", sequence_model]
     if multimodal_model:
         recommend_cmd += ["--multimodal-model", multimodal_model]
+    if slt_model:
+        recommend_cmd += ["--slt-model", slt_model]
     if args.cases_json:
         recommend_cmd += ["--cases-json", args.cases_json]
     _run(recommend_cmd)

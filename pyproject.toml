@@ -3,14 +3,14 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vcpria"
+name = "lsupria"
 version = "0.1.0"
-description = "VC-pria: real-time hand sign recognition demo (OpenCV + MediaPipe + ML)"
+description = "lsu-pria: real-time hand sign recognition demo (OpenCV + MediaPipe + ML)"
 requires-python = ">=3.9"
 dependencies = []
 
 [project.scripts]
-# CLI entrypoint is repo-local (vcpria.py). Installable package is vc_pria only.
+# CLI entrypoint is repo-local (lsupria.py). Installable package is lsu_pria only.
 
 [tool.setuptools]
 include-package-data = true

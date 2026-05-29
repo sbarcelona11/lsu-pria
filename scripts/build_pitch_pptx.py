@@ -34,7 +34,7 @@ def _apply_placeholders(md: str, cfg: dict) -> str:
     else:
         members_s = str(members)
     mapping = {
-        "{{TITLE}}": str(cfg.get("title", "VC-pria")),
+        "{{TITLE}}": str(cfg.get("title", "lsu-pria")),
         "{{COURSE}}": str(cfg.get("course", "")),
         "{{GROUP}}": str(cfg.get("group", "")),
         "{{MEMBERS}}": members_s,
@@ -210,7 +210,7 @@ def main() -> None:
         ftf = footer_l.text_frame
         ftf.clear()
         p = ftf.paragraphs[0]
-        p.text = "VC-pria — Pitch"
+        p.text = "lsu-pria — Pitch"
         p.font.size = Pt(14)
         p.font.color.rgb = FG_DIM
 
@@ -237,4 +237,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

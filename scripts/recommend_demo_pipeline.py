@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--cnn-model", default="")
     p.add_argument("--sequence-model", default="")
     p.add_argument("--multimodal-model", default="")
+    p.add_argument("--slt-model", default="")
     p.add_argument("--cases-json", default="")
     return p.parse_args()
 
@@ -32,6 +33,8 @@ def _model_arg(best: str, args: argparse.Namespace) -> list[str]:
         return ["--sequence-model", args.sequence_model]
     if best == "multimodal" and args.multimodal_model:
         return ["--multimodal-model", args.multimodal_model]
+    if best == "slt" and args.slt_model:
+        return ["--slt-model", args.slt_model]
     return []
 
 
@@ -48,7 +51,7 @@ def main() -> None:
 
     web_cmd = [
         "python3",
-        "vcpria.py",
+        "lsupria.py",
         "web",
         *_model_arg(best, args),
         "--host",
@@ -59,7 +62,7 @@ def main() -> None:
     ]
     validate_cmd = [
         "python3",
-        "vcpria.py",
+        "lsupria.py",
         "validate-videos",
         "--pipeline",
         best,

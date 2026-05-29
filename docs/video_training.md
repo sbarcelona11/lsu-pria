@@ -18,7 +18,7 @@ data/train_videos/
 Usar:
 
 ```bash
-python3 vcpria.py train-videos-stack \
+python3 lsupria.py train-videos-stack \
   --videos-root data/train_videos \
   --work-dir runs/demo_videos \
   --layout label
@@ -41,7 +41,7 @@ data/train_videos/
 Usar:
 
 ```bash
-python3 vcpria.py train-videos-stack \
+python3 lsupria.py train-videos-stack \
   --videos-root data/train_videos \
   --work-dir runs/demo_videos \
   --layout subject_label
@@ -82,4 +82,4 @@ python3 vcpria.py train-videos-stack \
 
 ## Colab
 
-El notebook `/Users/sebastian/Documents/VC-pria/notebooks/vc_pria_colab_video_training.ipynb` está preparado para este flujo.
+El notebook `/Users/sebastian/Documents/lsu-pria/notebooks/lsu_pria_colab_video_training.ipynb` está preparado para este flujo.

@@ -12,8 +12,8 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
-from vc_pria.hand import HandDetector
-from vc_pria.opencv_utils import SkinMaskConfig, apply_clahe, maybe_denoise, skin_mask_ycrcb
+from lsu_pria.hand import HandDetector
+from lsu_pria.opencv_utils import SkinMaskConfig, apply_clahe, maybe_denoise, skin_mask_ycrcb
 
 
 def parse_args() -> argparse.Namespace:

@@ -20,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--cnn-model", default="")
     p.add_argument("--sequence-model", default="")
     p.add_argument("--multimodal-model", default="")
+    p.add_argument("--slt-model", default="")
     p.add_argument("--stack-work-dir", default="", help="If set, auto-pick models from <work-dir>/models/")
     p.add_argument("--api-host", default="127.0.0.1")
     p.add_argument("--api-port", default="8000")
@@ -28,11 +29,12 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _resolve_models(repo: Path, args: argparse.Namespace) -> tuple[str, str, str, str]:
+def _resolve_models(repo: Path, args: argparse.Namespace) -> tuple[str, str, str, str, str]:
     landmarks = args.landmarks_model
     cnn = args.cnn_model
     sequence = args.sequence_model
     multimodal = args.multimodal_model
+    slt = args.slt_model
     if args.stack_work_dir:
         models_dir = Path(args.stack_work_dir) / "models"
         if not landmarks:
@@ -51,7 +53,11 @@ def _resolve_models(repo: Path, args: argparse.Namespace) -> tuple[str, str, str
             cand = models_dir / "multimodal_sequence.joblib"
             if cand.exists():
                 multimodal = str(cand)
-    return landmarks, cnn, sequence, multimodal
+        if not slt:
+            cand = models_dir / "slt_proxy.joblib"
+            if cand.exists():
+                slt = str(cand)
+    return landmarks, cnn, sequence, multimodal, slt
 
 
 def _terminate(proc: subprocess.Popen) -> None:
@@ -85,7 +91,7 @@ def main() -> None:
     elif not (web_ui / "node_modules").exists():
         raise SystemExit("web-ui/node_modules is missing. Run with --install-ui or install dependencies manually.")
 
-    landmarks, cnn, sequence, multimodal = _resolve_models(repo, args)
+    landmarks, cnn, sequence, multimodal, slt = _resolve_models(repo, args)
 
     backend_cmd = [
         sys.executable or "python",
@@ -103,6 +109,8 @@ def main() -> None:
         backend_cmd += ["--sequence-model", sequence]
     if multimodal:
         backend_cmd += ["--multimodal-model", multimodal]
+    if slt:
+        backend_cmd += ["--slt-model", slt]
 
     frontend_cmd = [npm, "run", "dev", "--", "--port", args.ui_port]
 

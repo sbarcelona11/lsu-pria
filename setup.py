@@ -17,9 +17,9 @@ def _read_requirements() -> list[str]:
 
 
 setup(
-    name="vcpria",
+    name="lsupria",
     version="0.1.0",
-    description="VC-pria: real-time hand sign recognition demo (OpenCV + MediaPipe + ML)",
+    description="lsu-pria: real-time hand sign recognition demo (OpenCV + MediaPipe + ML)",
     package_dir={"": "src"},
     packages=find_packages("src"),
     install_requires=_read_requirements(),

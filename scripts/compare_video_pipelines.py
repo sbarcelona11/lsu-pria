@@ -13,11 +13,12 @@ ensure_repo_root_on_path()
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Compare multiple pipelines over the same validation videos.")
-    p.add_argument("--pipelines", nargs="+", choices=["landmarks", "cnn", "sequence", "multimodal"], required=True)
+    p.add_argument("--pipelines", nargs="+", choices=["landmarks", "cnn", "sequence", "multimodal", "slt"], required=True)
     p.add_argument("--landmarks-model", default="")
     p.add_argument("--cnn-model", default="")
     p.add_argument("--sequence-model", default="")
     p.add_argument("--multimodal-model", default="")
+    p.add_argument("--slt-model", default="")
     p.add_argument("--videos", nargs="*", default=None)
     p.add_argument("--cases-json", default="")
     p.add_argument("--out-dir", required=True)
@@ -54,6 +55,10 @@ def _required_model_arg(pipeline: str, args: argparse.Namespace) -> list[str]:
         if not args.sequence_model:
             raise SystemExit("Missing --sequence-model for sequence pipeline")
         return ["--sequence-model", args.sequence_model]
+    if pipeline == "slt":
+        if not args.slt_model:
+            raise SystemExit("Missing --slt-model for slt pipeline")
+        return ["--slt-model", args.slt_model]
     if not args.multimodal_model:
         raise SystemExit("Missing --multimodal-model for multimodal pipeline")
     return ["--multimodal-model", args.multimodal_model]

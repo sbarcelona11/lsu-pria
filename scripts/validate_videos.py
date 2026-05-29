@@ -15,15 +15,16 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
-from vc_pria.hand import HandDetector, HandResult
-from vc_pria.multimodal import HolisticDetector, multimodal_bbox
-from vc_pria.opencv_utils import SkinMaskConfig, apply_clahe, maybe_denoise, skin_mask_hsv, skin_mask_ycrcb
-from vc_pria.pipelines.cnn import CnnPipeline
-from vc_pria.pipelines.landmarks import LandmarksPipeline
-from vc_pria.pipelines.multimodal_sequence import MultimodalSequencePipeline
-from vc_pria.pipelines.sequence import SequencePipeline
-from vc_pria.tracking import RoiTracker
-from vc_pria.webapp.composer import ComposeConfig, ComposeMode, ComposeState
+from lsu_pria.hand import HandDetector, HandResult
+from lsu_pria.multimodal import HolisticDetector, multimodal_bbox
+from lsu_pria.opencv_utils import SkinMaskConfig, apply_clahe, maybe_denoise, skin_mask_hsv, skin_mask_ycrcb
+from lsu_pria.pipelines.cnn import CnnPipeline
+from lsu_pria.pipelines.landmarks import LandmarksPipeline
+from lsu_pria.pipelines.multimodal_sequence import MultimodalSequencePipeline
+from lsu_pria.pipelines.sequence import SequencePipeline
+from lsu_pria.pipelines.slt import SltPipeline
+from lsu_pria.tracking import RoiTracker
+from lsu_pria.webapp.composer import ComposeConfig, ComposeMode, ComposeState
 
 
 @dataclass
@@ -36,11 +37,12 @@ class VideoCase:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run the recognition pipeline over local validation videos.")
-    p.add_argument("--pipeline", choices=["landmarks", "cnn", "sequence", "multimodal"], default="landmarks")
+    p.add_argument("--pipeline", choices=["landmarks", "cnn", "sequence", "multimodal", "slt"], default="landmarks")
     p.add_argument("--landmarks-model", default="")
     p.add_argument("--cnn-model", default="")
     p.add_argument("--sequence-model", default="")
     p.add_argument("--multimodal-model", default="")
+    p.add_argument("--slt-model", default="")
     p.add_argument("--videos", nargs="*", default=None, help="Local video files")
     p.add_argument("--cases-json", default="", help="JSON file with [{video_path,title,source_url,expected_text}]")
     p.add_argument("--out-dir", required=True)
@@ -103,6 +105,10 @@ def _load_pipeline(args: argparse.Namespace):
         if not args.multimodal_model:
             raise SystemExit("Missing --multimodal-model")
         return MultimodalSequencePipeline.load(Path(args.multimodal_model))
+    if args.pipeline == "slt":
+        if not args.slt_model:
+            raise SystemExit("Missing --slt-model")
+        return SltPipeline.load(Path(args.slt_model))
     if not args.sequence_model:
         raise SystemExit("Missing --sequence-model")
     return SequencePipeline.load(Path(args.sequence_model))
@@ -112,6 +118,31 @@ def _process_video(case: VideoCase, args: argparse.Namespace, pipeline) -> dict:
     path = Path(case.video_path)
     if not path.exists():
         raise SystemExit(f"Missing video: {path}")
+    if args.pipeline == "slt":
+        pred = pipeline.predict_video_file(
+            path,
+            sample_fps=float(args.sample_fps) if float(args.sample_fps) > 0 else None,
+            preprocess=bool(args.preprocess),
+        )
+        expected_norm = _normalize_text(case.expected_text)
+        predicted_norm = _normalize_text(pred.text)
+        exact_match = bool(expected_norm) and expected_norm == predicted_norm
+        token_match = bool(expected_norm) and all(tok in predicted_norm for tok in expected_norm.split())
+        return {
+            "video_path": str(path),
+            "title": case.title or path.stem,
+            "source_url": case.source_url,
+            "expected_text": case.expected_text,
+            "predicted_text": pred.text,
+            "predicted_tokens": pred.token_sequence,
+            "frames_total": pred.frames_total,
+            "frames_used": pred.frames_used,
+            "predictions_count": 1 if pred.text else 0,
+            "avg_confidence": float(pred.confidence),
+            "tracker_status_last": "off",
+            "exact_match": exact_match,
+            "token_match": token_match,
+        }
     if hasattr(pipeline, "reset"):
         try:
             pipeline.reset()

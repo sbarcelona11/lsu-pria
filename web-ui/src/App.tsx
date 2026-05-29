@@ -67,6 +67,7 @@ export default function App() {
   const [modelsText, setModelsText] = useState<string>("models: loading...");
 
   const [pipeline, setPipeline] = useState<PipelineName>("landmarks");
+  const [videoPipeline, setVideoPipeline] = useState<PipelineName>("landmarks");
   const [mode, setMode] = useState<ComposeMode>("both");
   const [preprocess, setPreprocess] = useState(true);
   const [skinMask, setSkinMask] = useState(false);
@@ -107,12 +108,14 @@ export default function App() {
         const hasC = !!h?.pipelines?.cnn;
         const hasS = !!h?.pipelines?.sequence;
         const hasM = !!h?.pipelines?.multimodal;
+        const hasT = !!h?.pipelines?.slt;
         const lCount = c?.classes?.landmarks?.length ?? 0;
         const cCount = c?.classes?.cnn?.length ?? 0;
         const sCount = c?.classes?.sequence?.length ?? 0;
         const mCount = c?.classes?.multimodal?.length ?? 0;
+        const tCount = c?.classes?.slt?.length ?? 0;
         setModelsText(
-          `models: landmarks=${hasL ? "on" : "off"}(${lCount}) cnn=${hasC ? "on" : "off"}(${cCount}) sequence=${hasS ? "on" : "off"}(${sCount}) multimodal=${hasM ? "on" : "off"}(${mCount})`,
+          `models: landmarks=${hasL ? "on" : "off"}(${lCount}) cnn=${hasC ? "on" : "off"}(${cCount}) sequence=${hasS ? "on" : "off"}(${sCount}) multimodal=${hasM ? "on" : "off"}(${mCount}) slt=${hasT ? "on" : "off"}(${tCount})`,
         );
         const tools = h?.tools || {};
         setToolsText(
@@ -121,6 +124,7 @@ export default function App() {
         if (!hasL && hasC) setPipeline("cnn");
         if (!hasL && !hasC && hasS) setPipeline("sequence");
         if (!hasL && !hasC && !hasS && hasM) setPipeline("multimodal");
+        if (!hasL && !hasC && !hasS && !hasM && hasT) setVideoPipeline("slt");
       } catch {
         setModelsText("models: error loading /health");
         setToolsText("tools: error loading /health");
@@ -287,7 +291,7 @@ export default function App() {
     <div className="page">
       <header className="header">
         <div>
-          <h2>VC-pria — Web UI</h2>
+          <h2>lsu-pria — Web UI</h2>
           <div className="muted mono">{modelsText}</div>
           <div className="muted mono">{toolsText}</div>
         </div>
@@ -357,6 +361,7 @@ export default function App() {
                 multimodal
               </label>
             </div>
+            <div className="muted small">SLT queda reservado para análisis de video offline.</div>
           </section>
 
           <section>
@@ -483,6 +488,28 @@ export default function App() {
           <section>
             <h3>Video analysis</h3>
             <div className="stack-gap">
+              <div className="row">
+                <label>
+                  <input type="radio" checked={videoPipeline === "landmarks"} onChange={() => setVideoPipeline("landmarks")} />
+                  landmarks
+                </label>
+                <label>
+                  <input type="radio" checked={videoPipeline === "cnn"} onChange={() => setVideoPipeline("cnn")} />
+                  cnn
+                </label>
+                <label>
+                  <input type="radio" checked={videoPipeline === "sequence"} onChange={() => setVideoPipeline("sequence")} />
+                  sequence
+                </label>
+                <label>
+                  <input type="radio" checked={videoPipeline === "multimodal"} onChange={() => setVideoPipeline("multimodal")} />
+                  multimodal
+                </label>
+                <label>
+                  <input type="radio" checked={videoPipeline === "slt"} onChange={() => setVideoPipeline("slt")} />
+                  slt
+                </label>
+              </div>
               <label className="stacked">
                 YouTube / URL directa
                 <input
@@ -532,7 +559,7 @@ export default function App() {
                       const result = await analyzeVideo(baseUrl, {
                         file: videoFile,
                         sourceUrl: videoUrlInput,
-                        pipeline,
+                        pipeline: videoPipeline,
                         mode,
                         preprocess,
                         skin_mask: skinMask,

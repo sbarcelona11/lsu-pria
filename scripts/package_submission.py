@@ -50,7 +50,7 @@ def main() -> None:
                 z.write(p, arcname=f"deliverables/out/{p.name}")
 
         # Core code
-        for p in ["README.md", "requirements.txt", "vcpria.py", "main.py", "webapp.py", "setup.py", "pyproject.toml"]:
+        for p in ["README.md", "requirements.txt", "lsupria.py", "main.py", "webapp.py", "setup.py", "pyproject.toml"]:
             fp = repo / p
             if fp.exists():
                 z.write(fp, arcname=p)
