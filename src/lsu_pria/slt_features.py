@@ -154,6 +154,95 @@ def extract_slt_features_from_video(
         cap.release()
 
 
+def extract_slt_features_from_frames(
+    frames_bgr: list[np.ndarray],
+    ts_ms: list[int],
+    *,
+    sample_fps: float = 6.0,
+    max_frames: int = 0,
+    preprocess: bool = False,
+    include_debug: bool = False,
+) -> SltFeatureExtraction:
+    """
+    Extract SLT features from an in-memory sequence of frames with timestamps.
+    This is used by the realtime-ish SLT web endpoint (rolling window).
+    """
+    if not frames_bgr or not ts_ms or len(frames_bgr) != len(ts_ms):
+        return SltFeatureExtraction(
+            features=np.zeros((0, 0), dtype=np.float32),
+            ts_ms=np.zeros((0,), dtype=np.int64),
+            bboxes=[],
+            landmarks_px=[],
+            frames_total=len(frames_bgr),
+            frames_used=0,
+        )
+    detector = HolisticDetector()
+    step_ms = 0 if sample_fps <= 0 else int(round(1000.0 / max(1e-6, float(sample_fps))))
+
+    features: list[np.ndarray] = []
+    out_ts: list[int] = []
+    bboxes: list[tuple[int, int, int, int] | None] = []
+    landmarks_px: list[list[list[int]] | None] = []
+    frames_used = 0
+    last_kept_ms: int | None = None
+
+    for frame_bgr, t_ms in zip(frames_bgr, ts_ms):
+        if max_frames and frames_used >= int(max_frames):
+            break
+        if step_ms > 0 and last_kept_ms is not None and int(t_ms) - int(last_kept_ms) < step_ms:
+            continue
+
+        work = frame_bgr
+        if preprocess:
+            work = apply_clahe(work)
+            work = maybe_denoise(work)
+        rgb = cv2.cvtColor(work, cv2.COLOR_BGR2RGB)
+        res = detector.detect(rgb)
+        feat = extract_multimodal_frame_features(res.left_hand, res.right_hand, res.pose, res.face)
+        features.append(feat)
+        out_ts.append(int(t_ms))
+        frames_used += 1
+        last_kept_ms = int(t_ms)
+
+        if include_debug:
+            bbox = multimodal_bbox(res, work.shape[1], work.shape[0]) if res is not None else None
+            bboxes.append(bbox)
+            primary = multimodal_primary_hand_landmarks(res) if res is not None else None
+            if primary is not None:
+                pts = np.stack(
+                    [
+                        np.clip(primary[:, 0] * float(work.shape[1]), 0, max(0, work.shape[1] - 1)),
+                        np.clip(primary[:, 1] * float(work.shape[0]), 0, max(0, work.shape[0] - 1)),
+                    ],
+                    axis=1,
+                )
+                landmarks_px.append(pts.astype(int).tolist())
+            else:
+                landmarks_px.append(None)
+
+    if not include_debug:
+        bboxes = [None] * len(features)
+        landmarks_px = [None] * len(features)
+
+    if not features:
+        return SltFeatureExtraction(
+            features=np.zeros((0, 0), dtype=np.float32),
+            ts_ms=np.zeros((0,), dtype=np.int64),
+            bboxes=[],
+            landmarks_px=[],
+            frames_total=len(frames_bgr),
+            frames_used=0,
+        )
+    return SltFeatureExtraction(
+        features=np.stack(features, axis=0).astype(np.float32),
+        ts_ms=np.asarray(out_ts, dtype=np.int64),
+        bboxes=bboxes,
+        landmarks_px=landmarks_px,
+        frames_total=len(frames_bgr),
+        frames_used=frames_used,
+    )
+
+
 def normalize_slt_text(text: str) -> str:
     return " ".join(str(text).strip().lower().split())
 

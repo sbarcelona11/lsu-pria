@@ -34,6 +34,19 @@ export type AnalyzeVideoResponse = {
   config: any;
 };
 
+export type SltRealtimeStepResponse = {
+  ok: boolean;
+  session_id: string;
+  predicted_text: string;
+  confidence: number;
+  frames_in_window: number;
+  frames_used: number;
+  compose_text: string;
+  new_token: string | null;
+  server_ms: number;
+  compose_debug?: any;
+};
+
 export async function getHealth(baseUrl: string) {
   const r = await fetch(`${baseUrl}/api/health`);
   if (!r.ok) throw new Error("health failed");
@@ -174,4 +187,57 @@ export async function inferFrame(
   const r = await fetch(`${baseUrl}/api/infer_frame`, { method: "POST", body: fd });
   if (!r.ok) throw new Error("infer_frame failed");
   return (await r.json()) as InferResponse;
+}
+
+export async function sltRealtimeStep(
+  baseUrl: string,
+  payload: {
+    blob: Blob;
+    session_id: string;
+    ts_ms: number;
+    window_ms: number;
+    sample_fps: number;
+    max_frames: number;
+    preprocess: boolean;
+    confidence_threshold: number;
+    stable_frames_min: number;
+    pause_ms_min: number;
+    cooldown_ms: number;
+    debug_compose: boolean;
+  },
+): Promise<SltRealtimeStepResponse> {
+  const fd = new FormData();
+  fd.append("image", payload.blob, "frame.jpg");
+  fd.append("session_id", payload.session_id || "");
+  fd.append("ts_ms", String(payload.ts_ms));
+  fd.append("window_ms", String(payload.window_ms));
+  fd.append("sample_fps", String(payload.sample_fps));
+  fd.append("max_frames", String(payload.max_frames));
+  fd.append("preprocess", payload.preprocess ? "1" : "0");
+  fd.append("confidence_threshold", String(payload.confidence_threshold));
+  fd.append("stable_frames_min", String(payload.stable_frames_min));
+  fd.append("pause_ms_min", String(payload.pause_ms_min));
+  fd.append("cooldown_ms", String(payload.cooldown_ms));
+  fd.append("debug_compose", payload.debug_compose ? "1" : "0");
+
+  const r = await fetch(`${baseUrl}/api/slt/realtime_step`, { method: "POST", body: fd });
+  if (!r.ok) {
+    let detail = "slt realtime failed";
+    try {
+      const data = await r.json();
+      if (data?.detail) detail = String(data.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+  return (await r.json()) as SltRealtimeStepResponse;
+}
+
+export async function sltRealtimeReset(baseUrl: string, sessionId: string) {
+  const fd = new FormData();
+  fd.append("session_id", sessionId);
+  const r = await fetch(`${baseUrl}/api/slt/realtime_reset`, { method: "POST", body: fd });
+  if (!r.ok) throw new Error("slt reset failed");
+  return (await r.json()) as any;
 }

@@ -17,6 +17,20 @@ source .venv/bin/activate  # macOS/Linux
 pip install -r requirements.txt
 ```
 
+## Mínimo para correr demo web (React UI)
+
+```bash
+# 1) Backend
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2) Frontend (build)
+cd web-ui
+npm ci
+npm run build
+cd ..
+```
+
 ## CLI unificado (recomendado)
 
 ```bash
@@ -319,6 +333,8 @@ Notebook para Google Colab:
 - pensado para correr `train-mm-stack`, `train-videos-mm-stack` o `ilsut-train-mm` en Colab.
 - `/Users/sebastian/Documents/lsu-pria/notebooks/lsu_pria_colab_video_training.ipynb`
 - pensado específicamente para entrenar directo desde carpetas de videos en Drive.
+- `/Users/sebastian/Documents/lsu-pria/notebooks/lsu_pria_colab_slt_training.ipynb`
+- pensado para correr `run-ilsut-slt-pipeline` (source2+source3 + Whisper/WhisperX) en Colab.
 
 Flujo integrado para preparar y entrenar desde iLSU-T:
 
@@ -344,6 +360,39 @@ python3 lsupria.py ilsut-build-episodes-csv \
   --root data/ilsut_extracted \
   --sources source2 \
   --out data/ilsut_source2_episodes_generated.csv
+
+### SLT generativo (WhisperX segments → texto)
+
+Si tu objetivo es **traducción generativa** (video → texto) usando WhisperX, evitá el flujo de `keywords -> labels` (reduce el vocabulario).
+En su lugar, usá el pipeline basado en **segments**:
+
+```bash
+python3 lsupria.py run-whisperx-slt-pipeline \
+  --root data/ilsut_extracted \
+  --sources source2 source3 \
+  --work-root runs/whisperx_slt_gen \
+  --min-words 1 --max-words 80 \
+  --min-duration-ms 700 --max-duration-ms 30000 \
+  --sample-fps 6 --max-frames 48 --preprocess
+```
+
+Notas:
+- Este pipeline genera un dataset `features` (multimodal) y entrena un baseline proxy local.
+- Para entrenar un modelo **generativo** real (neccam/slt + signjoey), pasá `--backend-repo` y `--run-backend` (ideal en Colab; requiere `torchtext` + `pyyaml`).
+- Cuando termina, quedan:
+  - `runs/.../train/external_backend_model/` (ckpts + `txt.vocab`/`gls.vocab`)
+  - `runs/.../train/external_backend_config.yaml`
+  - Podés servirlo en la web demo con:
+
+```bash
+python3 lsupria.py web \
+  --slt-model runs/whisperx_slt_gen/train/models/slt_proxy.joblib \
+  --host 127.0.0.1 --port 8000 \
+  --slt-gen-backend-repo /ABS/PATH/a/neccam-slt \
+  --slt-gen-config runs/whisperx_slt_gen/train/external_backend_config.yaml \
+  --slt-gen-ckpt runs/whisperx_slt_gen/train/external_backend_model/<ALGUNO>.ckpt \
+  --slt-gen-model-dir runs/whisperx_slt_gen/train/external_backend_model
+```
 
 python3 lsupria.py ilsut-analyze-support \
   --root data/ilsut_extracted \
@@ -546,6 +595,8 @@ Salida esperada:
 - `data/ilsut_run/results/report.md`
 
 ## Recolección de datos (webcam)
+
+Nota: este flujo es opcional. En esta entrega, si trabajás solo con **iLSU‑T (source2+source3 + WhisperX)** para SLT, podés ignorar esta sección.
 
 1) Crear dataset (landmarks + ROI imagen). Presionar teclas para etiquetar; `Esc` para salir:
 

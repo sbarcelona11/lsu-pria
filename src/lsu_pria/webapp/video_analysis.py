@@ -22,6 +22,7 @@ from ..opencv_utils import SkinMaskConfig, apply_clahe, maybe_denoise, skin_mask
 from ..pipelines.multimodal_sequence import MultimodalSequencePipeline
 from ..pipelines.sequence import SequencePipeline
 from ..pipelines.slt import SltPipeline
+from ..pipelines.slt_generative import SltGenerativePipeline
 from ..tracking import RoiTracker
 from .composer import ComposeConfig, ComposeMode, ComposeState
 
@@ -156,6 +157,8 @@ def load_video_pipeline(pipelines, pipeline_name: str):
         base = pipelines.multimodal
     elif pipeline_name == "slt":
         base = pipelines.slt
+    elif pipeline_name == "slt_gen":
+        base = pipelines.slt_gen
     else:
         raise ValueError(f"unknown pipeline: {pipeline_name}")
     if base is None:
@@ -255,6 +258,40 @@ def analyze_video(
             cap_render.release()
             if writer is not None:
                 writer.release()
+        elapsed_s = max(1e-6, time.perf_counter() - started)
+        return {
+            "video_path": str(video_path),
+            "predicted_text": pred.text,
+            "predicted_tokens": pred.token_sequence,
+            "frames_total": pred.frames_total,
+            "frames_used": pred.frames_used,
+            "predictions_count": 1 if pred.text else 0,
+            "avg_confidence": float(pred.confidence),
+            "tracker_status_last": "off",
+            "elapsed_s": elapsed_s,
+            "effective_fps": pred.frames_used / elapsed_s if elapsed_s > 0 else 0.0,
+            "config": asdict(config),
+            "log": [
+                {
+                    "ts_ms": 0,
+                    "label": pred.text,
+                    "confidence": float(pred.confidence),
+                    "no_hand": False,
+                    "tracker_status": "off",
+                    "new_token": pred.text,
+                }
+            ],
+        }
+    if config.pipeline_name == "slt_gen":
+        if not isinstance(pipeline, SltGenerativePipeline):
+            raise RuntimeError("Generative SLT pipeline not loaded")
+        started = time.perf_counter()
+        pred = pipeline.predict_video_file(
+            video_path,
+            sample_fps=float(config.sample_fps) if config.sample_fps > 0 else None,
+            max_frames=int(config.max_frames) if config.max_frames > 0 else None,
+            preprocess=bool(config.preprocess),
+        )
         elapsed_s = max(1e-6, time.perf_counter() - started)
         return {
             "video_path": str(video_path),

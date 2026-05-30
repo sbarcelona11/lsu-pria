@@ -7,12 +7,24 @@ import io
 import json
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 from typing import Optional
 
-import cv2
+try:
+    import cv2
+except ModuleNotFoundError as e:  # pragma: no cover
+    raise ModuleNotFoundError(
+        "Missing dependency: OpenCV (cv2).\n"
+        "Fix:\n"
+        "  - Create/activate a venv and install requirements:\n"
+        "      python3 -m venv .venv\n"
+        "      source .venv/bin/activate\n"
+        "      pip install -r requirements.txt\n"
+        "  - If you're on Python 3.13+ / 3.14 and OpenCV wheels are unavailable, use Python 3.11/3.12.\n"
+    ) from e
 import numpy as np
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +40,7 @@ from ..pipelines.landmarks import LandmarksPipeline
 from ..pipelines.multimodal_sequence import MultimodalSequencePipeline
 from ..pipelines.sequence import SequencePipeline
 from ..pipelines.slt import SltPipeline
+from ..pipelines.slt_generative import SltGenerativePipeline
 from ..tracking import RoiTracker
 from .composer import ComposeConfig, ComposeMode, ComposeState
 from .tts import TtsEngine
@@ -372,6 +385,7 @@ class LoadedPipelines:
     sequence: Optional[SequencePipeline] = None
     multimodal: Optional[MultimodalSequencePipeline] = None
     slt: Optional[SltPipeline] = None
+    slt_gen: Optional[SltGenerativePipeline] = None
 
     def get(self, name: str) -> object:
         if name == "landmarks":
@@ -394,6 +408,10 @@ class LoadedPipelines:
             if self.slt is None:
                 raise HTTPException(status_code=400, detail="slt model not loaded")
             return self.slt
+        if name == "slt_gen":
+            if self.slt_gen is None:
+                raise HTTPException(status_code=400, detail="slt_gen model not loaded")
+            return self.slt_gen
         raise HTTPException(status_code=400, detail=f"unknown pipeline: {name}")
 
 
@@ -422,6 +440,14 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
 
     sessions: dict[str, SessionRuntime] = {}
 
+    @dataclass
+    class SltRealtimeRuntime:
+        composer: ComposeState = field(default_factory=lambda: ComposeState(mode=ComposeMode(name="words")))
+        frames_bgr: deque[np.ndarray] = field(default_factory=lambda: deque(maxlen=400))
+        ts_ms: deque[int] = field(default_factory=lambda: deque(maxlen=400))
+
+    slt_sessions: dict[str, SltRealtimeRuntime] = {}
+
     # Legacy inline UI lives at /legacy (React build will be served at / when available).
     @app.get("/legacy", response_class=HTMLResponse)
     def legacy_index() -> str:
@@ -444,6 +470,7 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
                 "sequence": pipelines.sequence is not None,
                 "multimodal": pipelines.multimodal is not None,
                 "slt": pipelines.slt is not None,
+                "slt_gen": pipelines.slt_gen is not None,
             },
             "classes_count": {"landmarks": l_count, "cnn": c_count, "sequence": s_count, "multimodal": m_count, "slt": slt_count},
             "tools": tools_status(),
@@ -462,6 +489,8 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
             out["multimodal"] = list(pipelines.multimodal.labels)
         if pipelines.slt is not None:
             out["slt"] = list(pipelines.slt.labels)
+        if pipelines.slt_gen is not None:
+            out["slt_gen"] = ["<generative>"]
         return {"classes": out}
 
     @api.post("/session/new")
@@ -660,7 +689,7 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
         frame_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
         if frame_bgr is None:
             raise HTTPException(status_code=400, detail="bad image")
-        if pipeline == "slt":
+        if pipeline in {"slt", "slt_gen"}:
             raise HTTPException(status_code=400, detail="slt is only available for offline video analysis in this phase")
 
         work = frame_bgr
@@ -849,6 +878,94 @@ def create_app(pipelines: LoadedPipelines) -> FastAPI:
             }
         )
 
+    @api.post("/slt/realtime_step")
+    async def slt_realtime_step(
+        image: UploadFile = File(...),
+        session_id: str = Form(""),
+        ts_ms: int = Form(0),
+        window_ms: int = Form(8000),
+        sample_fps: float = Form(6.0),
+        max_frames: int = Form(0),
+        preprocess: str = Form("1"),
+        confidence_threshold: float = Form(0.50),
+        stable_frames_min: int = Form(3),
+        pause_ms_min: int = Form(900),
+        cooldown_ms: int = Form(800),
+        debug_compose: str = Form("0"),
+    ) -> JSONResponse:
+        if pipelines.slt is None:
+            raise HTTPException(status_code=400, detail="slt model not loaded")
+
+        t0 = time.perf_counter()
+        raw = await image.read()
+        arr = np.frombuffer(raw, dtype=np.uint8)
+        frame_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame_bgr is None:
+            raise HTTPException(status_code=400, detail="bad image")
+
+        now_ms = int(ts_ms or (time.time() * 1000))
+        if not session_id:
+            session_id = str(uuid.uuid4())
+        rt = slt_sessions.get(session_id)
+        if rt is None:
+            rt = SltRealtimeRuntime()
+            slt_sessions[session_id] = rt
+
+        # Rolling window buffer
+        rt.frames_bgr.append(frame_bgr)
+        rt.ts_ms.append(now_ms)
+        w_ms = max(250, int(window_ms))
+        while rt.ts_ms and (now_ms - int(rt.ts_ms[0])) > w_ms:
+            rt.ts_ms.popleft()
+            rt.frames_bgr.popleft()
+
+        pred = pipelines.slt.predict_frames(
+            list(rt.frames_bgr),
+            list(rt.ts_ms),
+            sample_fps=float(sample_fps),
+            max_frames=int(max_frames),
+            preprocess=(preprocess == "1"),
+        )
+        label = pred.text.strip() if pred.text else ""
+        conf = float(pred.confidence or 0.0)
+        no_hand = (not label) or (conf < float(confidence_threshold))
+
+        rt.composer.config = ComposeConfig(
+            confidence_threshold=float(confidence_threshold),
+            stable_frames_min=int(stable_frames_min),
+            pause_ms_min=int(pause_ms_min),
+            cooldown_ms=int(cooldown_ms),
+        )
+        new_token = rt.composer.update(label=label or "no_hand", confidence=conf, no_hand=no_hand, ts_ms=now_ms)
+        compose_text = rt.composer.text
+        compose_debug_state = rt.composer.debug_state() if debug_compose == "1" else None
+
+        server_ms = (time.perf_counter() - t0) * 1000.0
+        return JSONResponse(
+            {
+                "ok": True,
+                "session_id": session_id,
+                "predicted_text": label,
+                "confidence": conf,
+                "frames_in_window": len(rt.ts_ms),
+                "frames_used": int(pred.frames_used),
+                "compose_text": compose_text,
+                "new_token": new_token,
+                "server_ms": server_ms,
+                "compose_debug": compose_debug_state,
+            }
+        )
+
+    @api.post("/slt/realtime_reset")
+    def slt_realtime_reset(session_id: str = Form(...)) -> dict:
+        rt = slt_sessions.get(session_id)
+        if rt is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        rt.composer.reset()
+        rt.frames_bgr.clear()
+        rt.ts_ms.clear()
+        return {"ok": True}
+
     app.include_router(api)
     app.mount("/artifacts", StaticFiles(directory=str(artifacts_dir)), name="artifacts")
     return app
@@ -861,6 +978,10 @@ def main() -> None:
     ap.add_argument("--sequence-model", type=str, default="")
     ap.add_argument("--multimodal-model", type=str, default="")
     ap.add_argument("--slt-model", type=str, default="")
+    ap.add_argument("--slt-gen-backend-repo", type=str, default="", help="Path to neccam/slt repo checkout")
+    ap.add_argument("--slt-gen-config", type=str, default="", help="Path to the training config.yaml used for the generative SLT model")
+    ap.add_argument("--slt-gen-ckpt", type=str, default="", help="Path to a .ckpt produced by neccam/slt training")
+    ap.add_argument("--slt-gen-model-dir", type=str, default="", help="Model dir containing txt.vocab and gls.vocab (defaults to ckpt parent)")
     ap.add_argument("--host", type=str, default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--open-browser", action="store_true", help="Open the app URL in the default browser")
@@ -883,6 +1004,15 @@ def main() -> None:
         pipelines.multimodal = MultimodalSequencePipeline.load(Path(args.multimodal_model))
     if args.slt_model:
         pipelines.slt = SltPipeline.load(Path(args.slt_model))
+    if args.slt_gen_backend_repo and args.slt_gen_config and args.slt_gen_ckpt:
+        ckpt = Path(args.slt_gen_ckpt)
+        model_dir = Path(args.slt_gen_model_dir) if args.slt_gen_model_dir else ckpt.parent
+        pipelines.slt_gen = SltGenerativePipeline(
+            backend_repo=Path(args.slt_gen_backend_repo),
+            base_config=Path(args.slt_gen_config),
+            ckpt=ckpt,
+            model_dir=model_dir,
+        )
 
     import uvicorn
 
@@ -903,6 +1033,13 @@ def main() -> None:
     if ui_dir.exists() and ui_dir.is_dir():
         # Serve React build at root. API is under /api so there is no path clash.
         app.mount("/", StaticFiles(directory=str(ui_dir), html=True), name="ui_root")
+    else:
+        print(
+            f"[lsupria:web] React UI build not found at: {ui_dir}. "
+            "Run `bash scripts/build_web_ui.sh` (or `cd web-ui && npm ci && npm run build`). "
+            "Fallback UI is available at /legacy.",
+            file=sys.stderr,
+        )
 
     if args.open_browser:
         import threading

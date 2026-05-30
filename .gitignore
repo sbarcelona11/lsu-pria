@@ -3,6 +3,13 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 *.egg-info/
+*.log
+.ruff_cache/
+.mypy_cache/
+.coverage
+dist/
+build/
+*.tsbuildinfo
 
 data/
 models/

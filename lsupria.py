@@ -28,6 +28,10 @@ def main() -> None:
     sp.add_argument("--sequence-model", default="")
     sp.add_argument("--multimodal-model", default="")
     sp.add_argument("--slt-model", default="")
+    sp.add_argument("--slt-gen-backend-repo", default="")
+    sp.add_argument("--slt-gen-config", default="")
+    sp.add_argument("--slt-gen-ckpt", default="")
+    sp.add_argument("--slt-gen-model-dir", default="")
     sp.add_argument("--host", default="127.0.0.1")
     sp.add_argument("--port", default="8000")
     sp.add_argument("--open-browser", action="store_true")
@@ -219,6 +223,7 @@ def main() -> None:
     sp.add_argument("--skip-existing", action="store_true")
     sp.add_argument("--tool", choices=["auto", "ffmpeg", "opencv"], default="auto")
     sp.add_argument("--quality", choices=["copy", "fast", "balanced"], default="balanced")
+    sp.add_argument("--delete-source", action="store_true", help="Delete source video after successful conversion")
 
     sp = sub.add_parser("ilsut-build-episodes-csv", help="Generate an episodes.csv-like file from extracted iLSU-T files")
     sp.add_argument("--root", required=True)
@@ -252,6 +257,30 @@ def main() -> None:
     sp.add_argument("--test-size", default="0.2")
     sp.add_argument("--val-size", default="0.1")
     sp.add_argument("--seed", default="42")
+    sp.add_argument("--export-clips", action="store_true")
+    sp.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
+    sp.add_argument("--max-clips", default="0")
+
+    sp = sub.add_parser(
+        "ilsut-prepare-slt-subset-whisperx",
+        help="Prepare an SLT subset directly from WhisperX segments (clip -> target_text), for generative SLT",
+    )
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--work-dir", required=True)
+    sp.add_argument("--episodes-csv", default="auto")
+    sp.add_argument("--sources", nargs="*", default=None)
+    sp.add_argument("--video-dir-name", default="episodes")
+    sp.add_argument("--whisperx-dir-name", default="whisperx")
+    sp.add_argument("--test-size", default="0.2")
+    sp.add_argument("--val-size", default="0.1")
+    sp.add_argument("--seed", default="42")
+    sp.add_argument("--min-words", default="1")
+    sp.add_argument("--max-words", default="60")
+    sp.add_argument("--max-chars", default="240")
+    sp.add_argument("--min-duration-ms", default="700")
+    sp.add_argument("--max-duration-ms", default="25000")
+    sp.add_argument("--keep-punctuation", action="store_true")
+    sp.add_argument("--max-segments-per-episode", default="0")
     sp.add_argument("--export-clips", action="store_true")
     sp.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
     sp.add_argument("--max-clips", default="0")
@@ -338,6 +367,35 @@ def main() -> None:
     sp.add_argument("--backend-repo", default="")
     sp.add_argument("--config-base", default="")
     sp.add_argument("--epochs", default="10")
+    sp.add_argument("--batch-size", default="16")
+    sp.add_argument("--device", default="cpu")
+    sp.add_argument("--seed", default="42")
+    sp.add_argument("--run-backend", action="store_true")
+
+    sp = sub.add_parser(
+        "run-whisperx-slt-pipeline",
+        help="Run SLT pipeline directly from WhisperX segments (clip -> target_text), for generative SLT training",
+    )
+    sp.add_argument("--root", required=True)
+    sp.add_argument("--sources", nargs="+", default=["source2", "source3"])
+    sp.add_argument("--work-root", default="runs/whisperx_slt_pipeline")
+    sp.add_argument("--min-words", default="1")
+    sp.add_argument("--max-words", default="60")
+    sp.add_argument("--max-chars", default="240")
+    sp.add_argument("--min-duration-ms", default="700")
+    sp.add_argument("--max-duration-ms", default="25000")
+    sp.add_argument("--keep-punctuation", action="store_true")
+    sp.add_argument("--max-segments-per-episode", default="0")
+    sp.add_argument("--sample-fps", default="6")
+    sp.add_argument("--max-frames", default="48")
+    sp.add_argument("--preprocess", action="store_true")
+    sp.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
+    sp.add_argument("--max-clips", default="0")
+    sp.add_argument("--limit", default="0")
+    sp.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
+    sp.add_argument("--backend-repo", default="")
+    sp.add_argument("--config-base", default="")
+    sp.add_argument("--epochs", default="20")
     sp.add_argument("--batch-size", default="16")
     sp.add_argument("--device", default="cpu")
     sp.add_argument("--seed", default="42")
@@ -521,8 +579,12 @@ def main() -> None:
             cmd += ["--multimodal-model", args.multimodal_model]
         if args.slt_model:
             cmd += ["--slt-model", args.slt_model]
-        if args.slt_model:
-            cmd += ["--slt-model", args.slt_model]
+        if args.slt_gen_backend_repo and args.slt_gen_config and args.slt_gen_ckpt:
+            cmd += ["--slt-gen-backend-repo", args.slt_gen_backend_repo]
+            cmd += ["--slt-gen-config", args.slt_gen_config]
+            cmd += ["--slt-gen-ckpt", args.slt_gen_ckpt]
+            if args.slt_gen_model_dir:
+                cmd += ["--slt-gen-model-dir", args.slt_gen_model_dir]
         if args.open_browser:
             cmd += ["--open-browser"]
         raise SystemExit(_run(cmd))
@@ -957,6 +1019,8 @@ def main() -> None:
         ]
         if args.skip_existing:
             cmd.append("--skip-existing")
+        if args.delete_source:
+            cmd.append("--delete-source")
         raise SystemExit(_run(cmd))
 
     if args.cmd == "ilsut-build-episodes-csv":
@@ -978,6 +1042,52 @@ def main() -> None:
             cmd.append("--include-unmatched")
         if args.strict:
             cmd.append("--strict")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "ilsut-prepare-slt-subset-whisperx":
+        sources = list(args.sources or [])
+        cmd = [
+            py,
+            str(repo / "scripts" / "prepare_whisperx_slt_subset.py"),
+            "--root",
+            args.root,
+            "--work-dir",
+            args.work_dir,
+            "--episodes-csv",
+            args.episodes_csv,
+            "--video-dir-name",
+            args.video_dir_name,
+            "--whisperx-dir-name",
+            args.whisperx_dir_name,
+            "--test-size",
+            args.test_size,
+            "--val-size",
+            args.val_size,
+            "--seed",
+            args.seed,
+            "--min-words",
+            args.min_words,
+            "--max-words",
+            args.max_words,
+            "--max-chars",
+            args.max_chars,
+            "--min-duration-ms",
+            args.min_duration_ms,
+            "--max-duration-ms",
+            args.max_duration_ms,
+            "--max-segments-per-episode",
+            args.max_segments_per_episode,
+            "--clip-ext",
+            args.clip_ext,
+        ]
+        if sources:
+            cmd += ["--sources", *sources]
+        if args.keep_punctuation:
+            cmd.append("--keep-punctuation")
+        if args.export_clips:
+            cmd.append("--export-clips")
+        if int(args.max_clips) > 0:
+            cmd += ["--max-clips", args.max_clips]
         raise SystemExit(_run(cmd))
 
     if args.cmd == "ilsut-analyze-support":
@@ -1229,6 +1339,61 @@ def main() -> None:
             "--sources",
             *args.sources,
         ]
+        if args.preprocess:
+            cmd.append("--preprocess")
+        if args.run_backend:
+            cmd.append("--run-backend")
+        raise SystemExit(_run(cmd))
+
+    if args.cmd == "run-whisperx-slt-pipeline":
+        cmd = [
+            py,
+            str(repo / "scripts" / "run_whisperx_slt_pipeline.py"),
+            "--root",
+            args.root,
+            "--sources",
+            *args.sources,
+            "--work-root",
+            args.work_root,
+            "--min-words",
+            args.min_words,
+            "--max-words",
+            args.max_words,
+            "--max-chars",
+            args.max_chars,
+            "--min-duration-ms",
+            args.min_duration_ms,
+            "--max-duration-ms",
+            args.max_duration_ms,
+            "--max-segments-per-episode",
+            args.max_segments_per_episode,
+            "--sample-fps",
+            args.sample_fps,
+            "--max-frames",
+            args.max_frames,
+            "--clip-ext",
+            args.clip_ext,
+            "--max-clips",
+            args.max_clips,
+            "--limit",
+            args.limit,
+            "--backend",
+            args.backend,
+            "--backend-repo",
+            args.backend_repo,
+            "--config-base",
+            args.config_base,
+            "--epochs",
+            args.epochs,
+            "--batch-size",
+            args.batch_size,
+            "--device",
+            args.device,
+            "--seed",
+            args.seed,
+        ]
+        if args.keep_punctuation:
+            cmd.append("--keep-punctuation")
         if args.preprocess:
             cmd.append("--preprocess")
         if args.run_backend:
@@ -1578,14 +1743,13 @@ def main() -> None:
         slt_pitch_section = args.slt_pitch_section
         if args.slt_summary_json:
             slt_sections_dir = repo / "deliverables" / "out" / "_slt_sections"
-            cmd_sections = [
-                py,
-                str(repo / "scripts" / "render_ilsut_slt_sections.py"),
-                "--summary-json",
-                args.slt_summary_json,
-                "--out-dir",
-                str(slt_sections_dir),
-            ]
+            # Render SLT sections. Support both the iLSU-T keyword-based summary and the WhisperX segment-based summary.
+            try:
+                slt_summary = json.loads(Path(args.slt_summary_json).read_text(encoding="utf-8"))
+            except Exception:
+                slt_summary = {}
+            renderer = "render_whisperx_slt_sections.py" if "eval_proxy" in slt_summary else "render_ilsut_slt_sections.py"
+            cmd_sections = [py, str(repo / "scripts" / renderer), "--summary-json", args.slt_summary_json, "--out-dir", str(slt_sections_dir)]
             rc_sections = _run(cmd_sections)
             if rc_sections != 0:
                 raise SystemExit(rc_sections)

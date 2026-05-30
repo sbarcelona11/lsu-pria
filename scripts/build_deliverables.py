@@ -89,11 +89,13 @@ def _sanitize_pdf_text(s: str) -> str:
     s = (
         s.replace("—", "-")
         .replace("–", "-")
+        .replace("‑", "-")  # non-breaking hyphen (U+2011)
         .replace("“", '"')
         .replace("”", '"')
         .replace("’", "'")
         .replace("•", "*")
         .replace("→", "->")
+        .replace("↔", "<->")
         .replace("≤", "<=")
         .replace("≥", ">=")
         .replace("\u00a0", " ")

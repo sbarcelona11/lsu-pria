@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import joblib
@@ -42,6 +43,168 @@ def parse_args() -> argparse.Namespace:
 def _run(cmd: list[str], cwd: Path | None = None) -> int:
     print("+", " ".join(str(x) for x in cmd))
     return subprocess.call([str(x) for x in cmd], cwd=str(cwd) if cwd else None)
+
+
+def _find_feature_size(dataset_dir: Path) -> int:
+    jsonl = dataset_dir / "features_package" / "train.jsonl"
+    if not jsonl.exists():
+        return 0
+    for line in jsonl.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        p = Path(str(row.get("feature_path", "")))
+        if not p.exists():
+            continue
+        data = np.load(str(p), allow_pickle=True)
+        seq = np.asarray(data["features"], dtype=np.float32)
+        if seq.ndim == 2 and seq.shape[1] > 0:
+            return int(seq.shape[1])
+    return 0
+
+
+def _latest_ckpt(model_dir: Path) -> str:
+    ckpts = sorted(model_dir.glob("*.ckpt"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return str(ckpts[0]) if ckpts else ""
+
+
+def _write_neccam_slt_config(
+    *,
+    backend_repo: Path,
+    backend_data_dir: Path,
+    out_cfg: Path,
+    model_dir: Path,
+    feature_size: int,
+    epochs: int,
+    batch_size: int,
+    seed: int,
+    device: str,
+    base_cfg: Path | None,
+) -> dict:
+    """
+    Generate a SignJoey-compatible config for neccam/slt.
+
+    We use the backend repo's `configs/sign.yaml` as a base and patch a few keys
+    using line-level replacements to avoid needing PyYAML on the wrapper side.
+    """
+    if base_cfg is None:
+        base_cfg = backend_repo / "configs" / "sign.yaml"
+    if not base_cfg.exists():
+        raise SystemExit(f"Missing backend base config: {base_cfg}")
+
+    # CUDA only (SignJoey uses torch.cuda). On macOS, `mps` is not handled here.
+    use_cuda = device.lower() in {"cuda", "gpu"}  # user must run on a CUDA host/colab
+    cfg_txt = base_cfg.read_text(encoding="utf-8")
+
+    def _set_scalar(key: str, value: str) -> None:
+        nonlocal cfg_txt
+        lines = cfg_txt.splitlines()
+        out = []
+        replaced = False
+        for ln in lines:
+            if ln.lstrip().startswith(key + ":"):
+                indent = ln[: len(ln) - len(ln.lstrip())]
+                out.append(f"{indent}{key}: {value}")
+                replaced = True
+            else:
+                out.append(ln)
+        if not replaced:
+            out.append(f"{key}: {value}")
+        cfg_txt = "\n".join(out)
+
+    # Patch top-level name
+    _set_scalar("name", f"ilsut_whisperx_slt_{int(time.time())}")
+
+    # Data section keys we care about (assuming 4-space indentation in base file)
+    def _set_data(key: str, value: str) -> None:
+        nonlocal cfg_txt
+        lines = cfg_txt.splitlines()
+        out = []
+        in_data = False
+        replaced = False
+        for ln in lines:
+            if ln.startswith("data:"):
+                in_data = True
+                out.append(ln)
+                continue
+            if in_data and ln and not ln.startswith(" "):
+                in_data = False
+            if in_data and ln.lstrip().startswith(key + ":"):
+                indent = ln[: len(ln) - len(ln.lstrip())]
+                out.append(f"{indent}{key}: {value}")
+                replaced = True
+            else:
+                out.append(ln)
+        if not replaced:
+            # append under data:
+            out2 = []
+            inserted = False
+            for ln in out:
+                out2.append(ln)
+                if ln.startswith("data:") and not inserted:
+                    out2.append(f"    {key}: {value}")
+                    inserted = True
+            out = out2
+        cfg_txt = "\n".join(out)
+
+    _set_data("data_path", json.dumps(str(backend_data_dir)))  # keep quoting safe
+    _set_data("train", "ilsut/ilsut.train")
+    _set_data("dev", "ilsut/ilsut.val")
+    _set_data("test", "ilsut/ilsut.test")
+    _set_data("feature_size", str(int(feature_size)))
+    _set_data("level", "word")
+    _set_data("txt_lowercase", "true")
+    _set_data("max_sent_length", "400")
+
+    # Training section patches
+    def _set_training(key: str, value: str) -> None:
+        nonlocal cfg_txt
+        lines = cfg_txt.splitlines()
+        out = []
+        in_training = False
+        replaced = False
+        for ln in lines:
+            if ln.startswith("training:"):
+                in_training = True
+                out.append(ln)
+                continue
+            if in_training and ln and not ln.startswith(" "):
+                in_training = False
+            if in_training and ln.lstrip().startswith(key + ":"):
+                indent = ln[: len(ln) - len(ln.lstrip())]
+                out.append(f"{indent}{key}: {value}")
+                replaced = True
+            else:
+                out.append(ln)
+        if not replaced:
+            out2 = []
+            inserted = False
+            for ln in out:
+                out2.append(ln)
+                if ln.startswith("training:") and not inserted:
+                    out2.append(f"    {key}: {value}")
+                    inserted = True
+            out = out2
+        cfg_txt = "\n".join(out)
+
+    _set_training("random_seed", str(int(seed)))
+    _set_training("model_dir", json.dumps(str(model_dir)))
+    _set_training("epochs", str(int(epochs)))
+    _set_training("batch_size", str(int(batch_size)))
+    _set_training("overwrite", "true")
+    _set_training("use_cuda", "true" if use_cuda else "false")
+    _set_training("eval_translation_beam_size", "1")
+    _set_training("eval_translation_beam_alpha", "-1")
+
+    out_cfg.parent.mkdir(parents=True, exist_ok=True)
+    out_cfg.write_text(cfg_txt + "\n", encoding="utf-8")
+    return {
+        "config_path": str(out_cfg),
+        "model_dir": str(model_dir),
+        "use_cuda": bool(use_cuda),
+        "base_config": str(base_cfg),
+        "feature_size": int(feature_size),
+    }
 
 
 def _load_split_features(dataset_dir: Path, split: str) -> tuple[np.ndarray, list[str], list[dict]]:
@@ -143,13 +306,42 @@ def main() -> None:
         if backend_repo.exists():
             backend_dir = dataset_dir / "backend" / args.backend
             generated_cfg = out_dir / "external_backend_config.yaml"
-            src_cfg = Path(args.config_base) if args.config_base else (backend_dir / "config_template.yaml")
-            if src_cfg.exists():
-                shutil.copyfile(src_cfg, generated_cfg)
+            model_dir = out_dir / "external_backend_model"
+            backend_data_dir = backend_dir / "data"
+            feature_size = _find_feature_size(dataset_dir) or 105
+
+            base_cfg = Path(args.config_base) if args.config_base else None
+            backend_report.update(
+                _write_neccam_slt_config(
+                    backend_repo=backend_repo,
+                    backend_data_dir=backend_data_dir,
+                    out_cfg=generated_cfg,
+                    model_dir=model_dir,
+                    feature_size=feature_size,
+                    epochs=int(args.epochs),
+                    batch_size=int(args.batch_size),
+                    seed=int(args.seed),
+                    device=str(args.device),
+                    base_cfg=base_cfg,
+                )
+            )
             if args.run_backend:
+                # neccam/slt requires torchtext + pyyaml. Give a friendly error if missing.
+                try:
+                    import torchtext  # noqa: F401
+                    import yaml  # noqa: F401
+                except Exception as e:
+                    backend_report["status"] = "missing_backend_deps"
+                    backend_report["error"] = (
+                        "Missing deps for neccam/slt backend: torchtext and pyyaml. "
+                        "Install them in the same environment used to run lsupria."
+                    )
+                    raise SystemExit(backend_report["error"]) from e
                 rc = _run([py, "-m", "signjoey", "train", generated_cfg], cwd=backend_repo)
                 backend_report["status"] = "ok" if rc == 0 else "failed"
                 backend_report["return_code"] = int(rc)
+                if rc == 0:
+                    backend_report["ckpt_latest"] = _latest_ckpt(model_dir)
             else:
                 backend_report["status"] = "packaged"
         else:

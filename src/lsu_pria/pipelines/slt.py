@@ -6,7 +6,12 @@ from pathlib import Path
 import joblib
 import numpy as np
 
-from ..slt_features import aggregate_sequence_embedding, extract_slt_features_from_video, normalize_slt_text
+from ..slt_features import (
+    aggregate_sequence_embedding,
+    extract_slt_features_from_frames,
+    extract_slt_features_from_video,
+    normalize_slt_text,
+)
 
 
 @dataclass
@@ -69,6 +74,34 @@ class SltPipeline:
             video_path,
             start_ms=start_ms,
             end_ms=end_ms,
+            sample_fps=float(self.sample_fps if sample_fps is None else sample_fps),
+            max_frames=int(self.max_frames if max_frames is None else max_frames),
+            preprocess=bool(self.preprocess if preprocess is None else preprocess),
+            include_debug=False,
+        )
+        text, conf, emb = self.predict_from_sequence(extraction.features)
+        toks = normalize_slt_text(text).split() if text else []
+        return SltPrediction(
+            text=text,
+            confidence=conf,
+            token_sequence=toks,
+            embedding=emb,
+            frames_total=extraction.frames_total,
+            frames_used=extraction.frames_used,
+        )
+
+    def predict_frames(
+        self,
+        frames_bgr: list[np.ndarray],
+        ts_ms: list[int],
+        *,
+        sample_fps: float | None = None,
+        max_frames: int | None = None,
+        preprocess: bool | None = None,
+    ) -> SltPrediction:
+        extraction = extract_slt_features_from_frames(
+            frames_bgr,
+            ts_ms,
             sample_fps=float(self.sample_fps if sample_fps is None else sample_fps),
             max_frames=int(self.max_frames if max_frames is None else max_frames),
             preprocess=bool(self.preprocess if preprocess is None else preprocess),

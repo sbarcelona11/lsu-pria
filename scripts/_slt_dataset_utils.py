@@ -108,10 +108,52 @@ def write_jsonl(path: Path, rows: Iterable[dict]) -> None:
 
 
 def package_signjoey_features(path: Path, rows: list[dict]) -> None:
-    payload = rows
+    """
+    Package features for neccam/slt (SignJoey) expected format.
+
+    Input rows are expected to come from `features_package/{split}.jsonl`
+    and must include `feature_path` and `target_text`. We generate a list of
+    dicts containing torch tensors under the `sign` key:
+
+      {name, signer, gloss, text, sign}
+
+    where `sign` has shape [feature_size, T] and is float32.
+    """
+    try:
+        import torch
+    except Exception as e:  # pragma: no cover
+        raise SystemExit(
+            "Packaging SignJoey data requires PyTorch. Install requirements.txt (includes torch) "
+            "or run this step inside the project venv."
+        ) from e
+
+    import numpy as np
+
+    payload: list[dict] = []
+    for row in rows:
+        feature_path = Path(str(row.get("feature_path", "")))
+        if not feature_path.exists():
+            continue
+        data = np.load(str(feature_path), allow_pickle=True)
+        seq = np.asarray(data["features"], dtype=np.float32)  # [T, F]
+        if seq.ndim != 2 or seq.shape[0] <= 0 or seq.shape[1] <= 0:
+            continue
+        signer = str(row.get("group_id") or row.get("signer") or "unknown")
+        text = str(row.get("target_text") or row.get("text") or "").strip()
+        name = str(row.get("sample_id") or row.get("name") or feature_path.stem)
+        payload.append(
+            {
+                "name": name,
+                "signer": signer,
+                "gloss": "",
+                "text": text,
+                "sign": torch.from_numpy(seq.T).contiguous(),  # [F, T]
+            }
+        )
+
     path.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(path, "wb") as f:
-        pickle.dump(payload, f)
+        pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def write_csv(path: Path, rows: list[dict]) -> None:

@@ -5,8 +5,6 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import cv2
-
 from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
@@ -23,6 +21,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--skip-existing", action="store_true")
     p.add_argument("--tool", choices=["auto", "ffmpeg", "opencv"], default="auto")
     p.add_argument("--quality", choices=["copy", "fast", "balanced"], default="balanced")
+    p.add_argument(
+        "--delete-source",
+        action="store_true",
+        help="Delete source video after a successful conversion (saves disk space).",
+    )
     return p.parse_args()
 
 
@@ -48,6 +51,9 @@ def _convert_ffmpeg(ffmpeg: str, src: Path, dst: Path, quality: str) -> None:
     else:
         crf = "23" if quality == "balanced" else "28"
         preset = "medium" if quality == "balanced" else "veryfast"
+        # Some iLSU-T AVIs can have odd frame sizes (e.g., height=391).
+        # H.264 requires even width/height for yuv420p, so we force an even scale.
+        vf = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
         cmd = [
             ffmpeg,
             "-y",
@@ -55,10 +61,14 @@ def _convert_ffmpeg(ffmpeg: str, src: Path, dst: Path, quality: str) -> None:
             str(src),
             "-c:v",
             "libx264",
+            "-vf",
+            vf,
             "-preset",
             preset,
             "-crf",
             crf,
+            "-pix_fmt",
+            "yuv420p",
             "-c:a",
             "aac",
             "-movflags",
@@ -71,6 +81,8 @@ def _convert_ffmpeg(ffmpeg: str, src: Path, dst: Path, quality: str) -> None:
 
 
 def _convert_opencv(src: Path, dst: Path) -> None:
+    import cv2
+
     dst.parent.mkdir(parents=True, exist_ok=True)
     cap = cv2.VideoCapture(str(src))
     if not cap.isOpened():
@@ -132,6 +144,12 @@ def main() -> None:
                 _convert_ffmpeg(ffmpeg or "ffmpeg", src, dst, args.quality)
             else:
                 _convert_opencv(src, dst)
+            if args.delete_source and src != dst:
+                try:
+                    if dst.exists() and dst.stat().st_size > 0:
+                        src.unlink()
+                except Exception as e:
+                    print(f"warn: could not delete source video: {src} ({e})")
             converted += 1
 
     print(f"Done. converted_videos={converted} tool={tool}")
@@ -139,4 +157,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
