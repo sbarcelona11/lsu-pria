@@ -25,6 +25,8 @@ def _add_dir(z: zipfile.ZipFile, root: Path, base: Path, ignore_ext: set[str] | 
         p_posix = p.as_posix()
         if "deliverables/out/" in p_posix:
             continue
+        if p.name == ".DS_Store" or p.name.endswith(".tsbuildinfo"):
+            continue
         if ignore_ext and p.suffix.lower() in ignore_ext:
             continue
         rel = p.relative_to(base).as_posix()
@@ -50,7 +52,7 @@ def main() -> None:
                 z.write(p, arcname=f"deliverables/out/{p.name}")
 
         # Core code
-        for p in ["README.md", "requirements.txt", "vcpria.py", "main.py", "webapp.py", "setup.py", "pyproject.toml"]:
+        for p in ["README.md", "requirements.txt", "lsupria.py", "main.py", "webapp.py", "setup.py", "pyproject.toml"]:
             fp = repo / p
             if fp.exists():
                 z.write(fp, arcname=p)
@@ -64,6 +66,8 @@ def main() -> None:
         if (repo / "web-ui").exists():
             for p in (repo / "web-ui").rglob("*"):
                 if p.is_dir():
+                    continue
+                if p.name == ".DS_Store" or p.name.endswith(".tsbuildinfo"):
                     continue
                 parts = p.relative_to(repo).parts
                 if any(d in ignore_dirs for d in parts):

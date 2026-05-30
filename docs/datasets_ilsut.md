@@ -26,10 +26,9 @@ Fuentes:
 
 ## Recomendación práctica para el proyecto (tiempo/alcance)
 
-- Mantener iLSU-T como **fuente complementaria**:
-  - usarlo para *background* (referencial + discusión) y, si hay tiempo, para probar un baseline “weakly supervised” en 3–5 señas tipo palabra.
-- Para el modelo de demo en tiempo real (webcam), seguir usando:
-  - dataset propio (landmarks + ROI) para letras/señas estáticas, que coincide con la cámara/condiciones del demo.
+- En esta entrega (sin dataset propio), usar iLSU‑T como **fuente principal**:
+  - pipeline basado en segmentos WhisperX (clip → texto) para SLT, con métricas y un demo de “texto + voz”.
+- La recolección de dataset propio por webcam (landmarks + ROI) queda como flujo opcional del repo, pero **no se usa** para esta demo/entrenamiento.
 
 ## Si deciden entrenar con iLSU-T: pipeline mínimo sugerido
 

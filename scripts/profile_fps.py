@@ -11,7 +11,7 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
-from vc_pria.demo import DemoRunner, DemoToggles
+from lsu_pria.demo import DemoRunner, DemoToggles
 
 
 def parse_args() -> argparse.Namespace:

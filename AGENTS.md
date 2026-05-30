@@ -22,13 +22,13 @@ El repo incluye:
 - Preferir integraciones reutilizables sobre scripts aislados o hardcodeados.
 - No asumir que iLSU-T esta descargado localmente; el dataset tiene acceso restringido.
 - No agregar pasos de descarga automatica para iLSU-T.
-- Mantener compatibilidad entre scripts CLI y scripts internos. Si una capacidad nueva existe en `scripts/*.py`, exponerla tambien en `vcpria.py` cuando tenga sentido.
+- Mantener compatibilidad entre scripts CLI y scripts internos. Si una capacidad nueva existe en `scripts/*.py`, exponerla tambien en `lsupria.py` cuando tenga sentido.
 - Evitar romper el flujo actual de:
   - `train_landmarks.py`
   - `train_cnn.py`
   - `eval_split.py`
   - `run_ablation.py`
-  - `vcpria.py`
+  - `lsupria.py`
 
 ## Convenciones de datos
 

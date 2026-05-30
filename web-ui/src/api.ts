@@ -1,4 +1,4 @@
-export type PipelineName = "landmarks" | "cnn" | "sequence";
+export type PipelineName = "landmarks" | "cnn" | "sequence" | "multimodal" | "slt";
 export type ComposeMode = "both" | "words" | "spelling";
 export type MaskSpace = "ycrcb" | "hsv";
 
@@ -17,10 +17,88 @@ export type InferResponse = {
   compose_debug?: any;
 };
 
+export type AnalyzeVideoResponse = {
+  ok: boolean;
+  job_id: string;
+  input_video_url: string;
+  processed_video_url: string;
+  summary_url: string;
+  predicted_text: string;
+  predicted_tokens: string[];
+  frames_total: number;
+  frames_used: number;
+  predictions_count: number;
+  avg_confidence: number;
+  effective_fps: number;
+  elapsed_s: number;
+  config: any;
+};
+
+export type SltRealtimeStepResponse = {
+  ok: boolean;
+  session_id: string;
+  predicted_text: string;
+  confidence: number;
+  frames_in_window: number;
+  frames_used: number;
+  compose_text: string;
+  new_token: string | null;
+  server_ms: number;
+  compose_debug?: any;
+};
+
 export async function getHealth(baseUrl: string) {
   const r = await fetch(`${baseUrl}/api/health`);
   if (!r.ok) throw new Error("health failed");
   return (await r.json()) as any;
+}
+
+export async function analyzeVideo(
+  baseUrl: string,
+  payload: {
+    file?: File | null;
+    sourceUrl?: string;
+    pipeline: PipelineName;
+    mode: ComposeMode;
+    preprocess: boolean;
+    skin_mask: boolean;
+    mask_space: MaskSpace;
+    use_tracker: boolean;
+    confidence_threshold: number;
+    stable_frames_min: number;
+    pause_ms_min: number;
+    cooldown_ms: number;
+    sample_fps: number;
+    max_frames: number;
+  },
+): Promise<AnalyzeVideoResponse> {
+  const fd = new FormData();
+  if (payload.file) fd.append("file", payload.file, payload.file.name);
+  if (payload.sourceUrl?.trim()) fd.append("source_url", payload.sourceUrl.trim());
+  fd.append("pipeline", payload.pipeline);
+  fd.append("mode", payload.mode);
+  fd.append("preprocess", payload.preprocess ? "1" : "0");
+  fd.append("skin_mask", payload.skin_mask ? "1" : "0");
+  fd.append("mask_space", payload.mask_space);
+  fd.append("use_tracker", payload.use_tracker ? "1" : "0");
+  fd.append("confidence_threshold", String(payload.confidence_threshold));
+  fd.append("stable_frames_min", String(payload.stable_frames_min));
+  fd.append("pause_ms_min", String(payload.pause_ms_min));
+  fd.append("cooldown_ms", String(payload.cooldown_ms));
+  fd.append("sample_fps", String(payload.sample_fps));
+  fd.append("max_frames", String(payload.max_frames));
+  const r = await fetch(`${baseUrl}/api/video/analyze`, { method: "POST", body: fd });
+  if (!r.ok) {
+    let detail = "video analyze failed";
+    try {
+      const data = await r.json();
+      if (data?.detail) detail = String(data.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+  return (await r.json()) as AnalyzeVideoResponse;
 }
 
 export async function getClasses(baseUrl: string) {
@@ -109,4 +187,57 @@ export async function inferFrame(
   const r = await fetch(`${baseUrl}/api/infer_frame`, { method: "POST", body: fd });
   if (!r.ok) throw new Error("infer_frame failed");
   return (await r.json()) as InferResponse;
+}
+
+export async function sltRealtimeStep(
+  baseUrl: string,
+  payload: {
+    blob: Blob;
+    session_id: string;
+    ts_ms: number;
+    window_ms: number;
+    sample_fps: number;
+    max_frames: number;
+    preprocess: boolean;
+    confidence_threshold: number;
+    stable_frames_min: number;
+    pause_ms_min: number;
+    cooldown_ms: number;
+    debug_compose: boolean;
+  },
+): Promise<SltRealtimeStepResponse> {
+  const fd = new FormData();
+  fd.append("image", payload.blob, "frame.jpg");
+  fd.append("session_id", payload.session_id || "");
+  fd.append("ts_ms", String(payload.ts_ms));
+  fd.append("window_ms", String(payload.window_ms));
+  fd.append("sample_fps", String(payload.sample_fps));
+  fd.append("max_frames", String(payload.max_frames));
+  fd.append("preprocess", payload.preprocess ? "1" : "0");
+  fd.append("confidence_threshold", String(payload.confidence_threshold));
+  fd.append("stable_frames_min", String(payload.stable_frames_min));
+  fd.append("pause_ms_min", String(payload.pause_ms_min));
+  fd.append("cooldown_ms", String(payload.cooldown_ms));
+  fd.append("debug_compose", payload.debug_compose ? "1" : "0");
+
+  const r = await fetch(`${baseUrl}/api/slt/realtime_step`, { method: "POST", body: fd });
+  if (!r.ok) {
+    let detail = "slt realtime failed";
+    try {
+      const data = await r.json();
+      if (data?.detail) detail = String(data.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+  return (await r.json()) as SltRealtimeStepResponse;
+}
+
+export async function sltRealtimeReset(baseUrl: string, sessionId: string) {
+  const fd = new FormData();
+  fd.append("session_id", sessionId);
+  const r = await fetch(`${baseUrl}/api/slt/realtime_reset`, { method: "POST", body: fd });
+  if (!r.ok) throw new Error("slt reset failed");
+  return (await r.json()) as any;
 }
