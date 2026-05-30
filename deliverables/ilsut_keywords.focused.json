@@ -1,0 +1,22 @@
+{
+  "gracias": {
+    "include": ["gracias", "agradecemos", "agradezco", "agradecido", "agradecida"],
+    "phrases": ["muchas gracias", "muchas gracias.", "muchas gracias,", "te agradezco", "les agradecemos"],
+    "fuzzy": [{"text": "grasias", "score_cutoff": 90}],
+    "fuzzy_phrases": [{"text": "muchas grasias", "score_cutoff": 88}],
+    "exclude": ["gracia"],
+    "phrase_exclude": ["gracias a dios", "gracias al apoyo"]
+  },
+  "si": {
+    "include": ["si"],
+    "regex": ["\\bs[ií]\\b"],
+    "phrases": ["si claro", "si por supuesto", "si se puede", "asi es"],
+    "phrase_exclude": ["si bien", "si no", "como si"]
+  },
+  "no": {
+    "include": ["no"],
+    "regex": ["\\bno\\b"],
+    "phrases": ["no se", "no sé", "no puedo", "no quiero", "no hay", "para nada"],
+    "phrase_exclude": ["no obstante", "no solo", "no solamente"]
+  }
+}

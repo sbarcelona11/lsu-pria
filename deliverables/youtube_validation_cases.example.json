@@ -1,0 +1,21 @@
+[
+  {
+    "title": "Video base 1",
+    "source_url": "https://youtu.be/6sPy8fG6bQo",
+    "video_path": "/ABS/PATH/video1.mp4",
+    "expected_text": ""
+  },
+  {
+    "title": "Video base 2",
+    "source_url": "https://youtu.be/C-xWcauomg0",
+    "video_path": "/ABS/PATH/video2.mp4",
+    "expected_text": ""
+  },
+  {
+    "title": "Video base 3",
+    "source_url": "https://youtu.be/dMZFudGS8yQ",
+    "video_path": "/ABS/PATH/video3.mp4",
+    "expected_text": ""
+  }
+]
+

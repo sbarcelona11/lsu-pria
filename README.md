@@ -334,21 +334,13 @@ Notebook para Google Colab:
 - `/Users/sebastian/Documents/lsu-pria/notebooks/lsu_pria_colab_video_training.ipynb`
 - pensado específicamente para entrenar directo desde carpetas de videos en Drive.
 - `/Users/sebastian/Documents/lsu-pria/notebooks/lsu_pria_colab_slt_training.ipynb`
-- pensado para correr `run-ilsut-slt-pipeline` (source2+source3 + Whisper/WhisperX) en Colab.
+- (recomendado) pipeline completo **WhisperX SLT** con baseline proxy + backend generativo (SignJoey) si hay GPU/CUDA.
 
 Flujo integrado para preparar y entrenar desde iLSU-T:
 
 ```bash
-python3 lsupria.py ilsut-download \
-  --out-dir data/ilsut_archives \
-  --sources source2 source3 \
-  --skip-existing
-
-python3 lsupria.py ilsut-extract \
-  --archives-dir data/ilsut_archives \
-  --out-root data/ilsut_extracted \
-  --sources source2 source3 \
-  --skip-existing
+# Nota: iLSU‑T tiene acceso restringido. Este repo NO descarga el dataset automáticamente.
+# Se asume que ya tenés `data/ilsut_extracted/source2|source3/{episodes,whisperx}` poblado localmente.
 
 python3 lsupria.py ilsut-convert-videos \
   --root data/ilsut_extracted \
@@ -377,8 +369,8 @@ python3 lsupria.py run-whisperx-slt-pipeline \
 ```
 
 Notas:
-- Este pipeline genera un dataset `features` (multimodal) y entrena un baseline proxy local.
-- Para entrenar un modelo **generativo** real (neccam/slt + signjoey), pasá `--backend-repo` y `--run-backend` (ideal en Colab; requiere `torchtext` + `pyyaml`).
+- Este pipeline genera un dataset `features` y entrena un baseline proxy local (KNN) con evaluación.
+- Para entrenar un modelo **generativo** real (neccam/slt + SignJoey), pasá `--backend-repo` y `--run-backend` en **Colab con GPU/CUDA** (requiere `torchtext` + `pyyaml`). En macOS (MPS) este backend no está soportado tal cual.
 - Cuando termina, quedan:
   - `runs/.../train/external_backend_model/` (ckpts + `txt.vocab`/`gls.vocab`)
   - `runs/.../train/external_backend_config.yaml`

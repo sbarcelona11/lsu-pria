@@ -13,6 +13,7 @@ build/
 
 data/
 models/
-deliverables/
+deliverables/out/
+.DS_Store
 runs/
 tmp/
