@@ -92,8 +92,12 @@ def _write_neccam_slt_config(
     if not base_cfg.exists():
         raise SystemExit(f"Missing backend base config: {base_cfg}")
 
-    # CUDA only (SignJoey uses torch.cuda). On macOS, `mps` is not handled here.
-    use_cuda = device.lower() in {"cuda", "gpu"}  # user must run on a CUDA host/colab
+    dev = str(device or "cpu").lower()
+    if dev == "gpu":
+        dev = "cuda"
+    if dev not in {"cpu", "cuda", "mps", "auto"}:
+        dev = "cpu"
+    use_cuda = dev == "cuda"
     cfg_txt = base_cfg.read_text(encoding="utf-8")
 
     def _set_scalar(key: str, value: str) -> None:
@@ -192,15 +196,52 @@ def _write_neccam_slt_config(
     _set_training("epochs", str(int(epochs)))
     _set_training("batch_size", str(int(batch_size)))
     _set_training("overwrite", "true")
+    # Backwards compatible: newer forks may prefer training.device, older expects use_cuda.
+    _set_training("device", dev)
     _set_training("use_cuda", "true" if use_cuda else "false")
     _set_training("eval_translation_beam_size", "1")
     _set_training("eval_translation_beam_alpha", "-1")
+
+    # If the backend supports it, prefer a torchtext-free loader on macOS/MPS.
+    if dev == "mps":
+        def _set_data_loader(value: str) -> None:
+            nonlocal cfg_txt
+            lines = cfg_txt.splitlines()
+            out = []
+            in_data = False
+            replaced = False
+            for ln in lines:
+                if ln.startswith("data:"):
+                    in_data = True
+                    out.append(ln)
+                    continue
+                if in_data and ln and not ln.startswith(" "):
+                    in_data = False
+                if in_data and ln.lstrip().startswith("loader:"):
+                    indent = ln[: len(ln) - len(ln.lstrip())]
+                    out.append(f"{indent}loader: {value}")
+                    replaced = True
+                else:
+                    out.append(ln)
+            if not replaced:
+                out2 = []
+                inserted = False
+                for ln in out:
+                    out2.append(ln)
+                    if ln.startswith("data:") and not inserted:
+                        out2.append(f"    loader: {value}")
+                        inserted = True
+                out = out2
+            cfg_txt = "\n".join(out)
+
+        _set_data_loader("native")
 
     out_cfg.parent.mkdir(parents=True, exist_ok=True)
     out_cfg.write_text(cfg_txt + "\n", encoding="utf-8")
     return {
         "config_path": str(out_cfg),
         "model_dir": str(model_dir),
+        "device": dev,
         "use_cuda": bool(use_cuda),
         "base_config": str(base_cfg),
         "feature_size": int(feature_size),
@@ -326,15 +367,18 @@ def main() -> None:
                 )
             )
             if args.run_backend:
-                # neccam/slt requires torchtext + pyyaml. Give a friendly error if missing.
+                # Some forks support a torchtext-free native loader (needed for modern PyTorch/MPS).
+                # Always require PyYAML; require torchtext only when using the legacy loader.
                 try:
-                    import torchtext  # noqa: F401
                     import yaml  # noqa: F401
+                    need_torchtext = str(backend_report.get("device") or str(args.device)).lower() not in {"mps"}
+                    if need_torchtext:
+                        import torchtext  # noqa: F401
                 except Exception as e:
                     backend_report["status"] = "missing_backend_deps"
                     backend_report["error"] = (
-                        "Missing deps for neccam/slt backend: torchtext and pyyaml. "
-                        "Install them in the same environment used to run lsupria."
+                        "Missing deps for neccam/slt backend. "
+                        "Install pyyaml, and torchtext if you're using the legacy torchtext loader."
                     )
                     raise SystemExit(backend_report["error"]) from e
                 rc = _run([py, "-m", "signjoey", "train", generated_cfg], cwd=backend_repo)
