@@ -335,6 +335,7 @@ def main() -> None:
     sp.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
     sp.add_argument("--backend-repo", default="")
     sp.add_argument("--config-base", default="")
+    sp.add_argument("--backend-loader", choices=["auto", "native", "torchtext"], default="auto")
     sp.add_argument("--epochs", type=int, default=10)
     sp.add_argument("--batch-size", type=int, default=16)
     sp.add_argument("--device", default="cpu")
@@ -413,6 +414,7 @@ def main() -> None:
     sp.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
     sp.add_argument("--backend-repo", default="")
     sp.add_argument("--config-base", default="")
+    sp.add_argument("--backend-loader", choices=["auto", "native", "torchtext"], default="auto")
     sp.add_argument("--epochs", type=int, default=20)
     sp.add_argument("--batch-size", type=int, default=16)
     sp.add_argument("--device", default="cpu")
@@ -1257,6 +1259,8 @@ def main() -> None:
             args.backend_repo,
             "--config-base",
             args.config_base,
+            "--backend-loader",
+            args.backend_loader,
             "--epochs",
             args.epochs,
             "--batch-size",

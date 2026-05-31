@@ -29,6 +29,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
     p.add_argument("--backend-repo", default="")
     p.add_argument("--config-base", default="")
+    p.add_argument(
+        "--backend-loader",
+        choices=["auto", "native", "torchtext"],
+        default="auto",
+        help="Backend data loader selection (default: auto). Use native for modern PyTorch/MPS.",
+    )
     p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--device", default="cpu")
@@ -79,6 +85,7 @@ def _write_neccam_slt_config(
     batch_size: int,
     seed: int,
     device: str,
+    backend_loader: str,
     base_cfg: Path | None,
 ) -> dict:
     """
@@ -202,39 +209,50 @@ def _write_neccam_slt_config(
     _set_training("eval_translation_beam_size", "1")
     _set_training("eval_translation_beam_alpha", "-1")
 
-    # If the backend supports it, prefer a torchtext-free loader on macOS/MPS.
-    if dev == "mps":
-        def _set_data_loader(value: str) -> None:
-            nonlocal cfg_txt
-            lines = cfg_txt.splitlines()
-            out = []
-            in_data = False
-            replaced = False
-            for ln in lines:
-                if ln.startswith("data:"):
-                    in_data = True
-                    out.append(ln)
-                    continue
-                if in_data and ln and not ln.startswith(" "):
-                    in_data = False
-                if in_data and ln.lstrip().startswith("loader:"):
-                    indent = ln[: len(ln) - len(ln.lstrip())]
-                    out.append(f"{indent}loader: {value}")
-                    replaced = True
-                else:
-                    out.append(ln)
-            if not replaced:
-                out2 = []
-                inserted = False
-                for ln in out:
-                    out2.append(ln)
-                    if ln.startswith("data:") and not inserted:
-                        out2.append(f"    loader: {value}")
-                        inserted = True
-                out = out2
-            cfg_txt = "\n".join(out)
+    def _set_data_loader(value: str) -> None:
+        nonlocal cfg_txt
+        lines = cfg_txt.splitlines()
+        out = []
+        in_data = False
+        replaced = False
+        for ln in lines:
+            if ln.startswith("data:"):
+                in_data = True
+                out.append(ln)
+                continue
+            if in_data and ln and not ln.startswith(" "):
+                in_data = False
+            if in_data and ln.lstrip().startswith("loader:"):
+                indent = ln[: len(ln) - len(ln.lstrip())]
+                out.append(f"{indent}loader: {value}")
+                replaced = True
+            else:
+                out.append(ln)
+        if not replaced:
+            out2 = []
+            inserted = False
+            for ln in out:
+                out2.append(ln)
+                if ln.startswith("data:") and not inserted:
+                    out2.append(f"    loader: {value}")
+                    inserted = True
+            out = out2
+        cfg_txt = "\n".join(out)
 
-        _set_data_loader("native")
+    loader = str(backend_loader or "auto").lower().strip()
+    if loader not in {"auto", "native", "torchtext"}:
+        loader = "auto"
+    if loader == "auto":
+        if dev == "mps":
+            loader = "native"
+        else:
+            # Prefer torchtext when available (legacy behavior), otherwise fall back to native.
+            try:
+                import torchtext  # noqa: F401
+                loader = "torchtext"
+            except Exception:
+                loader = "native"
+    _set_data_loader(loader)
 
     out_cfg.parent.mkdir(parents=True, exist_ok=True)
     out_cfg.write_text(cfg_txt + "\n", encoding="utf-8")
@@ -243,6 +261,7 @@ def _write_neccam_slt_config(
         "model_dir": str(model_dir),
         "device": dev,
         "use_cuda": bool(use_cuda),
+        "data_loader": loader,
         "base_config": str(base_cfg),
         "feature_size": int(feature_size),
     }
@@ -363,6 +382,7 @@ def main() -> None:
                     batch_size=int(args.batch_size),
                     seed=int(args.seed),
                     device=str(args.device),
+                    backend_loader=str(args.backend_loader),
                     base_cfg=base_cfg,
                 )
             )
