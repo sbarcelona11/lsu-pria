@@ -101,9 +101,18 @@ def load_csv_rows(path: Path) -> tuple[list[dict[str, str]], IlsutColumns]:
 
 def build_file_index(root: Path) -> dict[str, Path]:
     index: dict[str, Path] = {}
+    duplicates: set[str] = set()
     for p in root.rglob("*"):
         if p.is_file():
-            index.setdefault(p.name, p)
+            name = p.name
+            if name in duplicates:
+                continue
+            if name in index:
+                # Ambiguous basename: avoid silently resolving to an arbitrary file.
+                duplicates.add(name)
+                index.pop(name, None)
+                continue
+            index[name] = p
     return index
 
 

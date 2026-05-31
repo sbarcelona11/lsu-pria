@@ -7,7 +7,29 @@ name = "lsupria"
 version = "0.1.0"
 description = "lsu-pria: real-time hand sign recognition demo (OpenCV + MediaPipe + ML)"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+  "opencv-contrib-python>=4.9",
+  "mediapipe==0.10.18",
+  "numpy>=1.23",
+  "scikit-learn>=1.3",
+  "joblib>=1.3",
+  "pandas>=2.0",
+  "tqdm>=4.66",
+  "pillow>=10.0",
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "python-multipart>=0.0.9",
+  "pyttsx3>=2.90",
+  "requests>=2.31",
+  "rapidfuzz>=3.9",
+  "tabulate>=0.9",
+  "matplotlib>=3.8",
+  "fpdf2>=2.7",
+  "python-pptx>=1.0.2",
+  "yt-dlp>=2025.1.26",
+  "torch>=2.2",
+  "torchvision>=0.17",
+]
 
 [project.scripts]
 # CLI entrypoint is repo-local (lsupria.py). Installable package is lsu_pria only.
