@@ -55,6 +55,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
     p.add_argument("--backend-repo", default="", help="Path to neccam/slt repo. If set, we can run backend training.")
     p.add_argument("--config-base", default="", help="Optional backend config base to copy over the template")
+    p.add_argument(
+        "--backend-loader",
+        choices=["auto", "native", "torchtext"],
+        default="auto",
+        help="Backend data loader selection (default: auto). Use native for modern PyTorch/MPS.",
+    )
     p.add_argument("--run-backend", action="store_true")
     return p.parse_args()
 
@@ -171,6 +177,8 @@ def main() -> None:
             args.backend_repo,
             "--config-base",
             args.config_base,
+            "--backend-loader",
+            args.backend_loader,
             "--epochs",
             args.epochs,
             "--batch-size",

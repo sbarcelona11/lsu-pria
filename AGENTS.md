@@ -61,9 +61,24 @@ El repo incluye:
 - Si se tocan argumentos CLI, validar `--help` del comando afectado.
 - Si se cambian formatos CSV, revisar compatibilidad con entrenamiento y evaluacion.
 
+## Entorno (macOS / Homebrew)
+
+- En macOS con Python instalado via Homebrew (PEP 668), **no** instalar deps con `pip` global. Usar un venv del repo:
+  - `/opt/homebrew/bin/python3.12 -m venv .venv`
+  - `source .venv/bin/activate`
+  - `python -m pip install -r requirements.txt`
+- Si hay conflictos de wheels con versiones nuevas de Python, preferir Python 3.12 para el venv.
+
+## SLT (WhisperX -> subset -> features -> backend)
+
+- Para evitar leakage por texto repetido entre splits en SLT (subtitle-derived), existe `--dedup-eval-text`:
+  - `train_exact` (default en `run-whisperx-slt-pipeline`) elimina filas de val/test cuyo `target_text` normalizado aparezca en train.
+- En macOS (MPS) el backend tipo SignJoey requiere:
+  - usar un fork del backend que soporte `training.device=mps` y `data.loader=native`,
+  - y/o forzar `--backend-loader native` desde `lsupria.py run-whisperx-slt-pipeline` / `train-ilsut-slt`.
+
 ## Documentacion
 
 - Si se agrega un comando nuevo de uso general, actualizar:
   - `README.md`
   - documentacion especifica en `docs/` si aplica
-
