@@ -44,6 +44,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
     p.add_argument("--max-clips", type=int, default=0)
     p.add_argument("--limit", type=int, default=0, help="Optional cap on exported dataset rows")
+    p.add_argument(
+        "--reuse-existing",
+        action="store_true",
+        help="Reuse existing subset/export/train artifacts under --work-root when present (useful for resume).",
+    )
 
     # Training
     p.add_argument("--epochs", type=int, default=20, help="Backend epochs (when --run-backend)")
@@ -91,6 +96,18 @@ def main() -> None:
     train_dir = work_root / "train"
     results_dir = train_dir / "results"
 
+    if args.reuse_existing:
+        subset_manifest = subset_dir / "subset_manifest.csv"
+        has_subset = subset_manifest.exists()
+        has_clips = (subset_dir / "clips_index.csv").exists() or (subset_dir / "clips").exists()
+        has_export = (export_dir / "dataset_validation.json").exists() and (export_dir / "features_package").exists()
+        has_train = (train_dir / "models" / "slt_proxy.joblib").exists() or (train_dir / "external_backend_model").exists()
+        print(
+            f"[resume] reuse_existing=on subset={has_subset} clips={has_clips} export={has_export} train={has_train}"
+        )
+    else:
+        has_subset = has_clips = has_export = has_train = False
+
     subset_cmd: list[str | Path] = [
         py,
         repo / "scripts" / "prepare_whisperx_slt_subset.py",
@@ -121,7 +138,10 @@ def main() -> None:
         subset_cmd.append("--keep-punctuation")
     if int(args.max_clips) > 0:
         subset_cmd += ["--max-clips", args.max_clips]
-    _run(subset_cmd)
+    if not (args.reuse_existing and has_subset and (not args.export_clips or has_clips)):
+        _run(subset_cmd)
+    else:
+        print(f"[resume] skipping subset build; found {subset_dir / 'subset_manifest.csv'}")
 
     export_cmd: list[str | Path] = [
         py,
@@ -145,56 +165,65 @@ def main() -> None:
     ]
     if args.preprocess:
         export_cmd.append("--preprocess")
-    _run(export_cmd)
+    if not (args.reuse_existing and has_export):
+        _run(export_cmd)
+    else:
+        print(f"[resume] skipping export/features; found {export_dir / 'dataset_validation.json'}")
 
-    _run(
-        [
-            py,
-            repo / "scripts" / "validate_ilsut_slt_dataset.py",
-            "--dataset-dir",
-            export_dir,
-            "--json-out",
-            export_dir / "dataset_validation.json",
-            "--md-out",
-            export_dir / "dataset_validation.md",
-            "--require-features",
-        ]
-    )
+    if not (args.reuse_existing and (export_dir / "dataset_validation.json").exists()):
+        _run(
+            [
+                py,
+                repo / "scripts" / "validate_ilsut_slt_dataset.py",
+                "--dataset-dir",
+                export_dir,
+                "--json-out",
+                export_dir / "dataset_validation.json",
+                "--md-out",
+                export_dir / "dataset_validation.md",
+                "--require-features",
+            ]
+        )
+    else:
+        print(f"[resume] skipping validate; found {export_dir / 'dataset_validation.json'}")
 
-    _run(
-        [
-            py,
-            repo / "scripts" / "train_ilsut_slt.py",
-            "--subset-dir",
-            subset_dir,
-            "--out-dir",
-            train_dir,
-            "--dataset-dir",
-            export_dir,
-            "--backend",
-            args.backend,
-            "--backend-repo",
-            args.backend_repo,
-            "--config-base",
-            args.config_base,
-            "--backend-loader",
-            args.backend_loader,
-            "--epochs",
-            args.epochs,
-            "--batch-size",
-            args.batch_size,
-            "--device",
-            args.device,
-            "--seed",
-            args.seed,
-            "--sample-fps",
-            args.sample_fps,
-            "--max-frames",
-            args.max_frames,
-        ]
-        + (["--preprocess"] if args.preprocess else [])
-        + (["--run-backend"] if args.run_backend else [])
-    )
+    if not (args.reuse_existing and has_train):
+        _run(
+            [
+                py,
+                repo / "scripts" / "train_ilsut_slt.py",
+                "--subset-dir",
+                subset_dir,
+                "--out-dir",
+                train_dir,
+                "--dataset-dir",
+                export_dir,
+                "--backend",
+                args.backend,
+                "--backend-repo",
+                args.backend_repo,
+                "--config-base",
+                args.config_base,
+                "--backend-loader",
+                args.backend_loader,
+                "--epochs",
+                args.epochs,
+                "--batch-size",
+                args.batch_size,
+                "--device",
+                args.device,
+                "--seed",
+                args.seed,
+                "--sample-fps",
+                args.sample_fps,
+                "--max-frames",
+                args.max_frames,
+            ]
+            + (["--preprocess"] if args.preprocess else [])
+            + (["--run-backend"] if args.run_backend else [])
+        )
+    else:
+        print(f"[resume] skipping train; found {train_dir}")
 
     proxy_model = train_dir / "models" / "slt_proxy.joblib"
     _run(

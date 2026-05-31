@@ -62,7 +62,9 @@ set -o pipefail
   --root "$ROOT" \
   --sources source2 source3 \
   --work-root "$WORK_ROOT" \
+  --reuse-existing \
   --limit 5000 \
+  --max-clips 5000 \
   --sample-fps 6 \
   --max-frames 24 \
   --epochs 10 \

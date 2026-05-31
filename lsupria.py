@@ -411,6 +411,7 @@ def main() -> None:
         default="train_exact",
         help="Drop duplicated target_text from val/test to reduce evaluation leakage (default: train_exact)",
     )
+    sp.add_argument("--reuse-existing", action="store_true")
     sp.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
     sp.add_argument("--backend-repo", default="")
     sp.add_argument("--config-base", default="")
@@ -1418,6 +1419,8 @@ def main() -> None:
             "--seed",
             args.seed,
         ]
+        if args.reuse_existing:
+            cmd.append("--reuse-existing")
         if args.keep_punctuation:
             cmd.append("--keep-punctuation")
         if args.preprocess:
