@@ -69,8 +69,8 @@ def _to_ms(x: object) -> int | None:
         return None
 
 
-_PUNCT_RE = re.compile(r"[\\r\\n\\t]+")
-_TRIM_PUNCT_RE = re.compile(r"^[\\s\\-–—,.;:!?¡¿()\\[\\]{}\"“”'’]+|[\\s\\-–—,.;:!?¡¿()\\[\\]{}\"“”'’]+$")
+_PUNCT_RE = re.compile(r"[\r\n\t]+")
+_TRIM_PUNCT_RE = re.compile(r"^[\s\-–—,.;:!?¡¿()\[\]{}\"“”'’]+|[\s\-–—,.;:!?¡¿()\[\]{}\"“”'’]+$")
 
 
 def _normalize_text(text: str, *, keep_punctuation: bool) -> str:
@@ -313,4 +313,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
