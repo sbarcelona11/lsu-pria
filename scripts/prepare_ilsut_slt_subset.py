@@ -35,6 +35,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--export-clips", action="store_true")
     p.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
     p.add_argument("--max-clips", type=int, default=0, help="Optional cap on exported clips for quick iterations")
+    p.add_argument(
+        "--dedup-eval-text",
+        choices=["off", "train_exact", "train_val_exact"],
+        default="off",
+        help=(
+            "Remove duplicated target_text from evaluation splits to avoid text leakage. "
+            "train_exact drops any val/test rows whose normalized target_text appears in train. "
+            "train_val_exact uses train∪val as reference when dropping from test."
+        ),
+    )
     return p.parse_args()
 
 
@@ -115,6 +125,38 @@ def _assign_splits(df: pd.DataFrame, test_size: float, val_size: float, seed: in
     return split
 
 
+def _normalize_eval_key(text: str) -> str:
+    return " ".join(str(text or "").strip().lower().split())
+
+
+def _dedup_eval_text(df: pd.DataFrame, mode: str) -> tuple[pd.DataFrame, dict]:
+    mode = str(mode or "off").strip().lower()
+    if mode == "off":
+        return df, {"mode": "off", "dropped": {}}
+    if "split" not in df.columns or "target_text" not in df.columns:
+        return df, {"mode": mode, "dropped": {}, "warning": "missing split/target_text"}
+
+    out = df.copy()
+    out["_text_key"] = out["target_text"].astype(str).map(_normalize_eval_key)
+
+    dropped: dict[str, int] = {}
+    train_keys = set(out.loc[out["split"] == "train", "_text_key"].tolist())
+    val_keys = set(out.loc[out["split"] == "val", "_text_key"].tolist())
+    ref_test = train_keys if mode == "train_exact" else (train_keys | val_keys)
+
+    before_val = int((out["split"] == "val").sum())
+    before_test = int((out["split"] == "test").sum())
+
+    if mode in {"train_exact", "train_val_exact"}:
+        out = out[~((out["split"] == "val") & (out["_text_key"].isin(train_keys)))].copy()
+        out = out[~((out["split"] == "test") & (out["_text_key"].isin(ref_test)))].copy()
+
+    dropped["val"] = before_val - int((out["split"] == "val").sum())
+    dropped["test"] = before_test - int((out["split"] == "test").sum())
+    out = out.drop(columns=["_text_key"])
+    return out, {"mode": mode, "dropped": dropped, "ref_sizes": {"train": len(train_keys), "val": len(val_keys)}}
+
+
 def _export_clips(df: pd.DataFrame, clips_dir: Path, clip_ext: str, max_clips: int) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     total = 0
@@ -184,6 +226,7 @@ def main() -> None:
             raise SystemExit("No rows left after applying labels-json selection.")
 
     df["split"] = _assign_splits(df, float(args.test_size), float(args.val_size), int(args.seed))
+    df, dedup_info = _dedup_eval_text(df, str(args.dedup_eval_text))
     subset_manifest = work_dir / "subset_manifest.csv"
     df.to_csv(subset_manifest, index=False)
     for split_name in ("train", "val", "test"):
@@ -217,7 +260,9 @@ def main() -> None:
             "export_clips": bool(args.export_clips),
             "clip_ext": str(args.clip_ext),
             "max_clips": int(args.max_clips),
+            "dedup_eval_text": str(args.dedup_eval_text),
         },
+        "dedup_eval_text": dedup_info,
     }
     (work_dir / "subset_info.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 

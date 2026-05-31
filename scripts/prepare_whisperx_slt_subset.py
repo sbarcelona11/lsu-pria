@@ -42,6 +42,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-duration-ms", type=int, default=25000, help="0 disables")
     p.add_argument("--keep-punctuation", action="store_true", help="Do not strip basic punctuation from target_text")
     p.add_argument("--max-segments-per-episode", type=int, default=0, help="0 disables")
+    p.add_argument(
+        "--dedup-eval-text",
+        choices=["off", "train_exact", "train_val_exact"],
+        default="off",
+        help=(
+            "Remove duplicated target_text from evaluation splits to avoid text leakage. "
+            "train_exact drops any val/test rows whose normalized target_text appears in train. "
+            "train_val_exact uses train∪val as reference when dropping from test."
+        ),
+    )
 
     p.add_argument("--export-clips", action="store_true")
     p.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
@@ -79,6 +89,47 @@ def _normalize_text(text: str, *, keep_punctuation: bool) -> str:
     if not keep_punctuation:
         t = _TRIM_PUNCT_RE.sub("", t).strip()
     return t
+
+
+def _normalize_eval_key(text: str) -> str:
+    return " ".join(str(text or "").strip().lower().split())
+
+
+def _dedup_eval_text(df: pd.DataFrame, mode: str) -> tuple[pd.DataFrame, dict]:
+    """
+    Deduplicate evaluation splits to reduce text leakage.
+
+    This does NOT change group-based splitting; it only removes rows from val/test
+    whose normalized target_text is present in the reference split(s).
+    """
+    mode = str(mode or "off").strip().lower()
+    if mode == "off":
+        return df, {"mode": "off", "dropped": {}}
+    if "split" not in df.columns or "target_text" not in df.columns:
+        return df, {"mode": mode, "dropped": {}, "warning": "missing split/target_text"}
+
+    out = df.copy()
+    out["_text_key"] = out["target_text"].astype(str).map(_normalize_eval_key)
+
+    dropped: dict[str, int] = {}
+    train_keys = set(out.loc[out["split"] == "train", "_text_key"].tolist())
+    val_keys = set(out.loc[out["split"] == "val", "_text_key"].tolist())
+    ref_test = train_keys if mode == "train_exact" else (train_keys | val_keys)
+
+    before_val = int((out["split"] == "val").sum())
+    before_test = int((out["split"] == "test").sum())
+
+    if mode in {"train_exact", "train_val_exact"}:
+        # Drop from val if its text appears in train.
+        out = out[~((out["split"] == "val") & (out["_text_key"].isin(train_keys)))].copy()
+        # Drop from test if its text appears in reference keys.
+        out = out[~((out["split"] == "test") & (out["_text_key"].isin(ref_test)))].copy()
+
+    dropped["val"] = before_val - int((out["split"] == "val").sum())
+    dropped["test"] = before_test - int((out["split"] == "test").sum())
+
+    out = out.drop(columns=["_text_key"])
+    return out, {"mode": mode, "dropped": dropped, "ref_sizes": {"train": len(train_keys), "val": len(val_keys)}}
 
 
 def _assign_splits(df: pd.DataFrame, test_size: float, val_size: float, seed: int) -> pd.Series:
@@ -260,6 +311,7 @@ def main() -> None:
 
     df = pd.DataFrame(rows)
     df["split"] = _assign_splits(df, float(args.test_size), float(args.val_size), int(args.seed))
+    df, dedup_info = _dedup_eval_text(df, str(args.dedup_eval_text))
 
     subset_manifest = work_dir / "subset_manifest.csv"
     df.to_csv(subset_manifest, index=False)
@@ -301,10 +353,12 @@ def main() -> None:
             "min_duration_ms": int(args.min_duration_ms),
             "max_duration_ms": int(args.max_duration_ms),
             "max_segments_per_episode": int(args.max_segments_per_episode),
+            "dedup_eval_text": str(args.dedup_eval_text),
             "export_clips": bool(args.export_clips),
             "clip_ext": str(args.clip_ext),
             "max_clips": int(args.max_clips),
         },
+        "dedup_eval_text": dedup_info,
     }
     (work_dir / "subset_info.json").write_text(json.dumps(info, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"Wrote: {subset_manifest}")

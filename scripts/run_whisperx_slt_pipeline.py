@@ -30,6 +30,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-duration-ms", type=int, default=25000)
     p.add_argument("--keep-punctuation", action="store_true")
     p.add_argument("--max-segments-per-episode", type=int, default=0)
+    p.add_argument(
+        "--dedup-eval-text",
+        choices=["off", "train_exact", "train_val_exact"],
+        default="train_exact",
+        help="Drop duplicated target_text from val/test to reduce evaluation leakage (default: train_exact).",
+    )
 
     # Export/features
     p.add_argument("--sample-fps", type=float, default=6.0)
@@ -104,6 +110,7 @@ def main() -> None:
         "--clip-ext",
         args.clip_ext,
     ]
+    subset_cmd += ["--dedup-eval-text", args.dedup_eval_text]
     if args.keep_punctuation:
         subset_cmd.append("--keep-punctuation")
     if int(args.max_clips) > 0:
