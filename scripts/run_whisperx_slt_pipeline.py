@@ -66,6 +66,12 @@ def parse_args() -> argparse.Namespace:
         default="auto",
         help="Backend data loader selection (default: auto). Use native for modern PyTorch/MPS.",
     )
+    p.add_argument(
+        "--recognition-loss-weight",
+        type=float,
+        default=0.0,
+        help="Backend recognition_loss_weight (default: 0.0). Keep 0.0 when no gloss labels are available.",
+    )
     p.add_argument("--run-backend", action="store_true")
     return p.parse_args()
 
@@ -206,6 +212,8 @@ def main() -> None:
                 args.config_base,
                 "--backend-loader",
                 args.backend_loader,
+                "--recognition-loss-weight",
+                args.recognition_loss_weight,
                 "--epochs",
                 args.epochs,
                 "--batch-size",

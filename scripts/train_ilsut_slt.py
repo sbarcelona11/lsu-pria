@@ -35,6 +35,12 @@ def parse_args() -> argparse.Namespace:
         default="auto",
         help="Backend data loader selection (default: auto). Use native for modern PyTorch/MPS.",
     )
+    p.add_argument(
+        "--recognition-loss-weight",
+        type=float,
+        default=0.0,
+        help="Set backend recognition_loss_weight (keep 0.0 when no gloss labels are available).",
+    )
     p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--device", default="cpu")
@@ -86,6 +92,7 @@ def _write_neccam_slt_config(
     seed: int,
     device: str,
     backend_loader: str,
+    recognition_loss_weight: float,
     base_cfg: Path | None,
 ) -> dict:
     """
@@ -209,8 +216,7 @@ def _write_neccam_slt_config(
     _set_training("eval_translation_beam_size", "1")
     _set_training("eval_translation_beam_alpha", "-1")
 
-    # iLSU-T WhisperX pipeline does not provide gloss labels; keep recognition loss disabled.
-    _set_scalar("recognition_loss_weight", "0.0")
+    _set_scalar("recognition_loss_weight", str(float(recognition_loss_weight)))
 
     def _set_data_loader(value: str) -> None:
         nonlocal cfg_txt
@@ -396,6 +402,7 @@ def main() -> None:
                     seed=int(args.seed),
                     device=str(args.device),
                     backend_loader=str(args.backend_loader),
+                    recognition_loss_weight=float(args.recognition_loss_weight),
                     base_cfg=base_cfg,
                 )
             )
