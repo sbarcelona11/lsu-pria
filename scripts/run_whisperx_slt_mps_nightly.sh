@@ -55,7 +55,7 @@ fi
 mkdir -p "$WORK_ROOT"
 LOG_PATH="$WORK_ROOT/run.log"
 echo "Logging to: $LOG_PATH"
-echo "Started at: $(date -Is)" | tee -a "$LOG_PATH"
+echo "Started at: $(date +\"%Y-%m-%dT%H:%M:%S%z\")" | tee -a "$LOG_PATH"
 
 set -o pipefail
 "$PY_BIN" "${REPO_DIR}/lsupria.py" run-whisperx-slt-pipeline \
