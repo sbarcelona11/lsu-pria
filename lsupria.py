@@ -15,7 +15,7 @@ def _repo_root() -> Path:
 
 
 def _run(args: list[str]) -> int:
-    return subprocess.call(args)
+    return subprocess.call([str(x) for x in args])
 
 
 def main() -> None:
