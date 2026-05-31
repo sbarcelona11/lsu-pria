@@ -209,6 +209,9 @@ def _write_neccam_slt_config(
     _set_training("eval_translation_beam_size", "1")
     _set_training("eval_translation_beam_alpha", "-1")
 
+    # iLSU-T WhisperX pipeline does not provide gloss labels; keep recognition loss disabled.
+    _set_scalar("recognition_loss_weight", "0.0")
+
     def _set_data_loader(value: str) -> None:
         nonlocal cfg_txt
         lines = cfg_txt.splitlines()
