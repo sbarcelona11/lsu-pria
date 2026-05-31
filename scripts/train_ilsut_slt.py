@@ -406,6 +406,7 @@ def main() -> None:
                 try:
                     import yaml  # noqa: F401
                     import portalocker  # noqa: F401
+                    import tensorboard  # noqa: F401
                     need_torchtext = str(backend_report.get("device") or str(args.device)).lower() not in {"mps"}
                     if need_torchtext:
                         import torchtext  # noqa: F401
@@ -413,7 +414,7 @@ def main() -> None:
                     backend_report["status"] = "missing_backend_deps"
                     backend_report["error"] = (
                         "Missing deps for neccam/slt backend. "
-                        "Install pyyaml + portalocker, and torchtext if you're using the legacy torchtext loader."
+                        "Install pyyaml + portalocker + tensorboard, and torchtext if you're using the legacy torchtext loader."
                     )
                     raise SystemExit(backend_report["error"]) from e
                 rc = _run([py, "-m", "signjoey", "train", generated_cfg], cwd=backend_repo)
