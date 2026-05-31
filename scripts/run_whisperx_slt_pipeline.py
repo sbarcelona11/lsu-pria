@@ -138,7 +138,7 @@ def main() -> None:
         subset_cmd.append("--keep-punctuation")
     if int(args.max_clips) > 0:
         subset_cmd += ["--max-clips", args.max_clips]
-    if not (args.reuse_existing and has_subset and (not args.export_clips or has_clips)):
+    if not (args.reuse_existing and has_subset and has_clips):
         _run(subset_cmd)
     else:
         print(f"[resume] skipping subset build; found {subset_dir / 'subset_manifest.csv'}")
