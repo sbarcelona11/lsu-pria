@@ -260,6 +260,12 @@ def main() -> None:
     sp.add_argument("--export-clips", action="store_true")
     sp.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
     sp.add_argument("--max-clips", type=int, default=0)
+    sp.add_argument(
+        "--dedup-eval-text",
+        choices=["off", "train_exact", "train_val_exact"],
+        default="off",
+        help="Drop duplicated target_text from val/test to reduce evaluation leakage (default: off)",
+    )
 
     sp = sub.add_parser(
         "ilsut-prepare-slt-subset-whisperx",
@@ -284,6 +290,12 @@ def main() -> None:
     sp.add_argument("--export-clips", action="store_true")
     sp.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
     sp.add_argument("--max-clips", type=int, default=0)
+    sp.add_argument(
+        "--dedup-eval-text",
+        choices=["off", "train_exact", "train_val_exact"],
+        default="off",
+        help="Drop duplicated target_text from val/test to reduce evaluation leakage (default: off)",
+    )
 
     sp = sub.add_parser("ilsut-audit-keywords", help="Audit which transcript variants are matched by the current iLSU-T keywords rules")
     sp.add_argument("--episodes-csv", default="auto")
@@ -392,6 +404,12 @@ def main() -> None:
     sp.add_argument("--clip-ext", choices=[".mp4", ".mkv"], default=".mp4")
     sp.add_argument("--max-clips", type=int, default=0)
     sp.add_argument("--limit", type=int, default=0)
+    sp.add_argument(
+        "--dedup-eval-text",
+        choices=["off", "train_exact", "train_val_exact"],
+        default="train_exact",
+        help="Drop duplicated target_text from val/test to reduce evaluation leakage (default: train_exact)",
+    )
     sp.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
     sp.add_argument("--backend-repo", default="")
     sp.add_argument("--config-base", default="")
@@ -1077,6 +1095,8 @@ def main() -> None:
             args.max_segments_per_episode,
             "--clip-ext",
             args.clip_ext,
+            "--dedup-eval-text",
+            args.dedup_eval_text,
         ]
         if sources:
             cmd += ["--sources", *sources]
@@ -1141,6 +1161,8 @@ def main() -> None:
             args.clip_ext,
             "--max-clips",
             args.max_clips,
+            "--dedup-eval-text",
+            args.dedup_eval_text,
         ]
         if args.sources:
             cmd += ["--sources", *args.sources]
@@ -1375,6 +1397,8 @@ def main() -> None:
             args.max_clips,
             "--limit",
             args.limit,
+            "--dedup-eval-text",
+            args.dedup_eval_text,
             "--backend",
             args.backend,
             "--backend-repo",
