@@ -51,6 +51,13 @@ if [[ -d "$WORK_ROOT/train/external_backend_model" ]]; then
   fi
 fi
 
+# Log everything to a timestamped file inside the run folder too.
+mkdir -p "$WORK_ROOT"
+LOG_PATH="$WORK_ROOT/run.log"
+echo "Logging to: $LOG_PATH"
+echo "Started at: $(date -Is)" | tee -a "$LOG_PATH"
+
+set -o pipefail
 "$PY_BIN" "${REPO_DIR}/lsupria.py" run-whisperx-slt-pipeline \
   --root "$ROOT" \
   --sources source2 source3 \
@@ -64,4 +71,4 @@ fi
   --backend-repo "$BACKEND_REPO" \
   --backend-loader native \
   --dedup-eval-text train_exact \
-  --run-backend
+  --run-backend | tee -a "$LOG_PATH"

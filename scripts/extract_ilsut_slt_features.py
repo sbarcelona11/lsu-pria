@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import numpy as np
@@ -42,7 +43,12 @@ def main() -> None:
 
     rows_out: list[dict] = []
     split_rows: dict[str, list[dict]] = {}
+    t0 = time.monotonic()
+    last_log = time.monotonic()
+    processed = 0
+    kept = 0
     for idx, row in enumerate(df.to_dict(orient="records")):
+        processed += 1
         clip_path = Path(str(row.get("clip_path") or row.get("video_path") or ""))
         if not clip_path.exists():
             continue
@@ -96,6 +102,15 @@ def main() -> None:
         }
         rows_out.append(payload)
         split_rows.setdefault(split, []).append(payload)
+        kept += 1
+
+        now = time.monotonic()
+        if now - last_log >= 10.0:
+            rate = kept / max(1e-9, (now - t0))
+            print(
+                f"[features] processed={processed}/{len(df)} kept={kept} rate={rate:.2f}/s out_dir={out_dir}"
+            )
+            last_log = now
 
     write_jsonl(out_dir / "features_index.jsonl", rows_out)
     for split, rows in split_rows.items():

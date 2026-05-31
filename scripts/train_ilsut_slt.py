@@ -318,12 +318,17 @@ def _summarize_eval(refs: list[str], preds: list[str], confs: list[float]) -> di
 
 def main() -> None:
     args = parse_args()
+    print(
+        f"[train] subset_dir={args.subset_dir} out_dir={args.out_dir} dataset_dir={args.dataset_dir or '(auto)'} "
+        f"device={args.device} backend={args.backend} backend_loader={args.backend_loader} run_backend={bool(args.run_backend)}"
+    )
     repo = Path(__file__).resolve().parents[1]
     py = sys.executable or "python"
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     dataset_dir = Path(args.dataset_dir) if args.dataset_dir else (out_dir / "dataset_export")
     if not dataset_dir.exists():
+        print(f"[train] exporting dataset (features) -> {dataset_dir}")
         cmd = [
             py,
             repo / "scripts" / "export_ilsut_slt_dataset.py",
@@ -345,15 +350,20 @@ def main() -> None:
         rc = _run(cmd)
         if rc != 0:
             raise SystemExit(rc)
+    else:
+        print(f"[train] using existing dataset_dir={dataset_dir}")
     validation = validate_slt_dataset_dir(dataset_dir, require_features=True)
     if not validation["valid"]:
         raise SystemExit(f"Dataset export is invalid: {validation['errors']}")
+    print(f"[train] dataset valid rows={validation.get('rows')} features_rows={validation.get('feature_rows')}")
 
     train_x, train_texts, train_rows = _load_split_features(dataset_dir, "train")
     val_x, val_texts, val_rows = _load_split_features(dataset_dir, "val")
     test_x, test_texts, test_rows = _load_split_features(dataset_dir, "test")
     if train_x.size == 0 or not train_texts:
         raise SystemExit("No training features available under dataset export")
+    feat_dim = int(train_x.shape[1]) if getattr(train_x, "ndim", 0) == 2 else 0
+    print(f"[train] loaded features: train={len(train_texts)} val={len(val_texts)} test={len(test_texts)} feat_dim={feat_dim}")
 
     backend_report = {
         "backend": args.backend,
@@ -387,6 +397,10 @@ def main() -> None:
                 )
             )
             if args.run_backend:
+                print(
+                    f"[train] running backend training (signjoey) device={backend_report.get('device')} "
+                    f"loader={backend_report.get('data_loader')} cfg={generated_cfg}"
+                )
                 # Some forks support a torchtext-free native loader (needed for modern PyTorch/MPS).
                 # Always require PyYAML; require torchtext only when using the legacy loader.
                 try:
@@ -411,6 +425,7 @@ def main() -> None:
         else:
             backend_report["status"] = "missing_repo"
 
+    print("[train] training proxy baseline (KNN)")
     proxy_model, labels = _train_proxy(train_x, train_texts, int(args.seed))
     val_preds, val_confs = _predict_bundle(proxy_model, labels, val_x)
     test_preds, test_confs = _predict_bundle(proxy_model, labels, test_x)
