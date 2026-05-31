@@ -11,6 +11,12 @@ set -euo pipefail
 #   BACKEND_REPO=/abs/path/to/slt-mps \
 #   WORK_ROOT=/abs/path/to/runs/whisperx_slt_mps_nightly \
 #   ./scripts/run_whisperx_slt_mps_nightly.sh
+#
+# Resume an existing run (reuses the same WORK_ROOT and keeps backend checkpoints):
+#   ROOT=/abs/path/to/ilsut_extracted \
+#   BACKEND_REPO=/abs/path/to/slt-mps \
+#   RESUME_FROM=/abs/path/to/runs/whisperx_slt_mps_nightly_YYYYMMDD_HHMM \
+#   ./scripts/run_whisperx_slt_mps_nightly.sh
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY_BIN="${REPO_DIR}/.venv/bin/python3"
@@ -24,13 +30,25 @@ fi
 
 ROOT="${ROOT:-${REPO_DIR}/data/ilsut_extracted}"
 BACKEND_REPO="${BACKEND_REPO:-}"
+RESUME_FROM="${RESUME_FROM:-}"
 WORK_ROOT="${WORK_ROOT:-${REPO_DIR}/runs/whisperx_slt_mps_nightly}"
+
+if [[ -n "$RESUME_FROM" ]]; then
+  WORK_ROOT="$RESUME_FROM"
+fi
 
 if [[ -z "$BACKEND_REPO" ]]; then
   echo "Set BACKEND_REPO to your SLT backend repo (fork with MPS/native loader)."
   echo "Example:"
   echo "  BACKEND_REPO=/Users/sebastian/Documents/slt-mps"
   exit 1
+fi
+
+if [[ -d "$WORK_ROOT/train/external_backend_model" ]]; then
+  if ls "$WORK_ROOT/train/external_backend_model"/*.ckpt >/dev/null 2>&1; then
+    echo "Resuming backend from existing checkpoints under:"
+    echo "  $WORK_ROOT/train/external_backend_model"
+  fi
 fi
 
 "$PY_BIN" "${REPO_DIR}/lsupria.py" run-whisperx-slt-pipeline \
@@ -47,4 +65,3 @@ fi
   --backend-loader native \
   --dedup-eval-text train_exact \
   --run-backend
-
