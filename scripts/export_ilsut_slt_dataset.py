@@ -151,6 +151,9 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    print(f"[export] subset_dir={subset_dir}")
+    print(f"[export] out_dir={out_dir} mode={args.mode} sample_fps={args.sample_fps} max_frames={args.max_frames} limit={args.limit}")
+
     df = load_subset_rows(subset_dir)
     if args.limit:
         df = _apply_limit(df, int(args.limit)).copy()
@@ -158,6 +161,7 @@ def main() -> None:
 
     subset_export = out_dir / "subset_export.csv"
     df.to_csv(subset_export, index=False)
+    print(f"[export] wrote {subset_export} rows={len(df)}")
 
     split_rows: dict[str, list[dict]] = {}
     for row in df.to_dict(orient="records"):
@@ -181,9 +185,11 @@ def main() -> None:
     for split, rows in split_rows.items():
         write_jsonl(manifests_dir / f"{split}.jsonl", rows)
         write_csv(manifests_dir / f"{split}.csv", rows)
+    print(f"[export] wrote manifests to {manifests_dir}")
 
     feature_dir = out_dir / "features_package"
     if args.mode == "features":
+        print(f"[export] extracting features -> {feature_dir}")
         _run(
             [
                 py,
@@ -203,6 +209,7 @@ def main() -> None:
             ]
             + (["--preprocess"] if args.preprocess else [])
         )
+        print("[export] building backend bundle")
         features_rows: dict[str, list[dict]] = {"train": [], "val": [], "test": []}
         for split in ("train", "val", "test"):
             p = feature_dir / f"{split}.jsonl"
@@ -211,6 +218,7 @@ def main() -> None:
             rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
             features_rows[split] = rows
         _write_backend_bundle(out_dir, features_rows, args)
+        print(f"[export] wrote backend bundle to {out_dir / 'backend' / args.backend}")
 
     metadata = {
         "mode": args.mode,

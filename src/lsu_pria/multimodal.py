@@ -6,6 +6,8 @@ from typing import Optional
 import mediapipe as mp
 import numpy as np
 
+from .mediapipe_compat import ensure_mediapipe_task_model, has_legacy_solutions
+
 
 POSE_KEYPOINTS = [
     0,
@@ -44,30 +46,74 @@ class HolisticResult:
 
 class HolisticDetector:
     def __init__(self) -> None:
-        self._mp = mp.solutions.holistic
-        self._holistic = self._mp.Holistic(
-            static_image_mode=False,
-            model_complexity=1,
-            smooth_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
+        self._legacy = has_legacy_solutions()
+        if self._legacy:
+            self._mp = mp.solutions.holistic
+            self._holistic = self._mp.Holistic(
+                static_image_mode=False,
+                model_complexity=1,
+                smooth_landmarks=True,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+        else:
+            from mediapipe.tasks import python
+            from mediapipe.tasks.python import vision
+
+            model_path = ensure_mediapipe_task_model("holistic_landmarker.task")
+            base_options = python.BaseOptions(model_asset_path=str(model_path))
+            options = vision.HolisticLandmarkerOptions(
+                base_options=base_options,
+                running_mode=vision.RunningMode.IMAGE,
+            )
+            self._holistic = vision.HolisticLandmarker.create_from_options(options)
 
     @staticmethod
     def _to_array(landmarks, expected: int) -> Optional[np.ndarray]:
         if landmarks is None:
             return None
-        pts = np.array([[p.x, p.y, p.z] for p in landmarks.landmark], dtype=np.float32)
+        # Legacy solutions: landmarks.landmark
+        if hasattr(landmarks, "landmark"):
+            pts = np.array([[p.x, p.y, p.z] for p in landmarks.landmark], dtype=np.float32)
+        else:
+            # Tasks API: list[NormalizedLandmark]
+            pts = np.array([[p.x, p.y, p.z] for p in landmarks], dtype=np.float32)
         if pts.shape != (expected, 3):
             return None
         return pts
 
     def detect(self, frame_rgb: np.ndarray) -> HolisticResult:
-        out = self._holistic.process(frame_rgb)
-        left_hand = self._to_array(out.left_hand_landmarks, 21)
-        right_hand = self._to_array(out.right_hand_landmarks, 21)
-        pose_full = self._to_array(out.pose_landmarks, 33)
-        face_full = self._to_array(out.face_landmarks, 468)
+        if self._legacy:
+            out = self._holistic.process(frame_rgb)
+            left_hand = self._to_array(out.left_hand_landmarks, 21)
+            right_hand = self._to_array(out.right_hand_landmarks, 21)
+            pose_full = self._to_array(out.pose_landmarks, 33)
+            face_full = self._to_array(out.face_landmarks, 468)
+        else:
+            # Tasks API expects mp.Image
+            image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+            out = self._holistic.detect(image)
+
+            def _pick(container, expected: int) -> Optional[np.ndarray]:
+                if container is None:
+                    return None
+                # Some fields are list[NormalizedLandmark] (single person),
+                # others may be list[list[NormalizedLandmark]].
+                if isinstance(container, list):
+                    if not container:
+                        return None
+                    first = container[0]
+                    if isinstance(first, list):
+                        return self._to_array(first, expected)
+                    if hasattr(first, "x") and len(container) == expected:
+                        return self._to_array(container, expected)
+                    return None
+                return self._to_array(container, expected)
+
+            left_hand = _pick(getattr(out, "left_hand_landmarks", None), 21)
+            right_hand = _pick(getattr(out, "right_hand_landmarks", None), 21)
+            pose_full = _pick(getattr(out, "pose_landmarks", None), 33)
+            face_full = _pick(getattr(out, "face_landmarks", None), 468)
 
         pose = pose_full[POSE_KEYPOINTS] if pose_full is not None else None
         face = face_full[FACE_KEYPOINTS] if face_full is not None else None

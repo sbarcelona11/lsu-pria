@@ -35,6 +35,12 @@ def parse_args() -> argparse.Namespace:
         default="auto",
         help="Backend data loader selection (default: auto). Use native for modern PyTorch/MPS.",
     )
+    p.add_argument(
+        "--recognition-loss-weight",
+        type=float,
+        default=0.0,
+        help="Set backend recognition_loss_weight (keep 0.0 when no gloss labels are available).",
+    )
     p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--device", default="cpu")
@@ -86,6 +92,7 @@ def _write_neccam_slt_config(
     seed: int,
     device: str,
     backend_loader: str,
+    recognition_loss_weight: float,
     base_cfg: Path | None,
 ) -> dict:
     """
@@ -209,6 +216,8 @@ def _write_neccam_slt_config(
     _set_training("eval_translation_beam_size", "1")
     _set_training("eval_translation_beam_alpha", "-1")
 
+    _set_scalar("recognition_loss_weight", str(float(recognition_loss_weight)))
+
     def _set_data_loader(value: str) -> None:
         nonlocal cfg_txt
         lines = cfg_txt.splitlines()
@@ -318,12 +327,17 @@ def _summarize_eval(refs: list[str], preds: list[str], confs: list[float]) -> di
 
 def main() -> None:
     args = parse_args()
+    print(
+        f"[train] subset_dir={args.subset_dir} out_dir={args.out_dir} dataset_dir={args.dataset_dir or '(auto)'} "
+        f"device={args.device} backend={args.backend} backend_loader={args.backend_loader} run_backend={bool(args.run_backend)}"
+    )
     repo = Path(__file__).resolve().parents[1]
     py = sys.executable or "python"
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     dataset_dir = Path(args.dataset_dir) if args.dataset_dir else (out_dir / "dataset_export")
     if not dataset_dir.exists():
+        print(f"[train] exporting dataset (features) -> {dataset_dir}")
         cmd = [
             py,
             repo / "scripts" / "export_ilsut_slt_dataset.py",
@@ -345,15 +359,20 @@ def main() -> None:
         rc = _run(cmd)
         if rc != 0:
             raise SystemExit(rc)
+    else:
+        print(f"[train] using existing dataset_dir={dataset_dir}")
     validation = validate_slt_dataset_dir(dataset_dir, require_features=True)
     if not validation["valid"]:
         raise SystemExit(f"Dataset export is invalid: {validation['errors']}")
+    print(f"[train] dataset valid rows={validation.get('rows')} features_rows={validation.get('feature_rows')}")
 
     train_x, train_texts, train_rows = _load_split_features(dataset_dir, "train")
     val_x, val_texts, val_rows = _load_split_features(dataset_dir, "val")
     test_x, test_texts, test_rows = _load_split_features(dataset_dir, "test")
     if train_x.size == 0 or not train_texts:
         raise SystemExit("No training features available under dataset export")
+    feat_dim = int(train_x.shape[1]) if getattr(train_x, "ndim", 0) == 2 else 0
+    print(f"[train] loaded features: train={len(train_texts)} val={len(val_texts)} test={len(test_texts)} feat_dim={feat_dim}")
 
     backend_report = {
         "backend": args.backend,
@@ -383,14 +402,21 @@ def main() -> None:
                     seed=int(args.seed),
                     device=str(args.device),
                     backend_loader=str(args.backend_loader),
+                    recognition_loss_weight=float(args.recognition_loss_weight),
                     base_cfg=base_cfg,
                 )
             )
             if args.run_backend:
+                print(
+                    f"[train] running backend training (signjoey) device={backend_report.get('device')} "
+                    f"loader={backend_report.get('data_loader')} cfg={generated_cfg}"
+                )
                 # Some forks support a torchtext-free native loader (needed for modern PyTorch/MPS).
                 # Always require PyYAML; require torchtext only when using the legacy loader.
                 try:
                     import yaml  # noqa: F401
+                    import portalocker  # noqa: F401
+                    import tensorboard  # noqa: F401
                     need_torchtext = str(backend_report.get("device") or str(args.device)).lower() not in {"mps"}
                     if need_torchtext:
                         import torchtext  # noqa: F401
@@ -398,7 +424,7 @@ def main() -> None:
                     backend_report["status"] = "missing_backend_deps"
                     backend_report["error"] = (
                         "Missing deps for neccam/slt backend. "
-                        "Install pyyaml, and torchtext if you're using the legacy torchtext loader."
+                        "Install pyyaml + portalocker + tensorboard, and torchtext if you're using the legacy torchtext loader."
                     )
                     raise SystemExit(backend_report["error"]) from e
                 rc = _run([py, "-m", "signjoey", "train", generated_cfg], cwd=backend_repo)
@@ -411,6 +437,7 @@ def main() -> None:
         else:
             backend_report["status"] = "missing_repo"
 
+    print("[train] training proxy baseline (KNN)")
     proxy_model, labels = _train_proxy(train_x, train_texts, int(args.seed))
     val_preds, val_confs = _predict_bundle(proxy_model, labels, val_x)
     test_preds, test_confs = _predict_bundle(proxy_model, labels, test_x)

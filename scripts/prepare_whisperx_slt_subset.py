@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -221,6 +222,7 @@ def main() -> None:
     args = parse_args()
     repo = Path(__file__).resolve().parents[1]
     py = sys.executable or "python"
+    t_start = time.monotonic()
 
     root = Path(args.root)
     work_dir = Path(args.work_dir)
@@ -251,11 +253,17 @@ def main() -> None:
     df_ep["whisper_abs"] = df_ep["whisperx_path"].astype(str).map(lambda p: str((root / p).resolve()))
 
     rows: list[dict] = []
+    ep_total = int(len(df_ep))
+    ep_ok = 0
+    seg_kept = 0
+    seg_seen = 0
+    last_log = time.monotonic()
     for e in df_ep.to_dict(orient="records"):
         video_abs = Path(str(e["video_abs"]))
         whisper_abs = Path(str(e["whisper_abs"]))
         if not video_abs.exists() or not whisper_abs.exists():
             continue
+        ep_ok += 1
         episode_id = str(e.get("episode_id") or "")
         source = str(e.get("source") or "")
         group_id = episode_id or source
@@ -266,6 +274,7 @@ def main() -> None:
         for seg_idx, seg in enumerate(segs):
             if not isinstance(seg, dict):
                 continue
+            seg_seen += 1
             t0 = _to_ms(seg.get("start"))
             t1 = _to_ms(seg.get("end"))
             if t0 is None or t1 is None or t1 <= t0:
@@ -303,8 +312,17 @@ def main() -> None:
                 }
             )
             kept += 1
+            seg_kept += 1
             if int(args.max_segments_per_episode) > 0 and kept >= int(args.max_segments_per_episode):
                 break
+
+        # Periodic progress (kept lightweight).
+        now = time.monotonic()
+        if now - last_log >= 10.0:
+            print(
+                f"[subset] episodes_ok={ep_ok}/{ep_total} segments_kept={seg_kept} segments_seen={seg_seen} elapsed_s={int(now - t_start)}"
+            )
+            last_log = now
 
     if not rows:
         raise SystemExit("No segments kept. Check WhisperX JSON format and filtering thresholds.")
@@ -323,6 +341,8 @@ def main() -> None:
         clips_dir.mkdir(parents=True, exist_ok=True)
         out_rows: list[SegmentRow] = []
         exported = 0
+        t_clips = time.monotonic()
+        last_clip_log = time.monotonic()
         for row in df.to_dict(orient="records"):
             if int(args.max_clips) > 0 and exported >= int(args.max_clips):
                 break
@@ -336,6 +356,11 @@ def main() -> None:
             row["clip_path"] = str(out_path)
             out_rows.append(SegmentRow(**{k: row.get(k, "") for k in SegmentRow.__annotations__.keys()}))  # type: ignore[arg-type]
             exported += 1
+            now = time.monotonic()
+            if now - last_clip_log >= 10.0:
+                rate = exported / max(1e-9, (now - t_clips))
+                print(f"[clips] exported={exported} rate={rate:.2f}/s elapsed_s={int(now - t_clips)} last_split={split}")
+                last_clip_log = now
         pd.DataFrame([r.__dict__ for r in out_rows]).to_csv(work_dir / "clips_index.csv", index=False)
         print(f"Wrote: {work_dir / 'clips_index.csv'}")
 

@@ -19,6 +19,8 @@ matplotlib>=3.8
 fpdf2>=2.7
 python-pptx>=1.0.2
 yt-dlp>=2025.1.26
+portalocker>=2.8
+tensorboard>=2.13
 
 # CNN transfer learning (Pipeline B)
 torch>=2.2

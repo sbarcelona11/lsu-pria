@@ -336,6 +336,7 @@ def main() -> None:
     sp.add_argument("--backend-repo", default="")
     sp.add_argument("--config-base", default="")
     sp.add_argument("--backend-loader", choices=["auto", "native", "torchtext"], default="auto")
+    sp.add_argument("--recognition-loss-weight", type=float, default=0.0)
     sp.add_argument("--epochs", type=int, default=10)
     sp.add_argument("--batch-size", type=int, default=16)
     sp.add_argument("--device", default="cpu")
@@ -411,10 +412,12 @@ def main() -> None:
         default="train_exact",
         help="Drop duplicated target_text from val/test to reduce evaluation leakage (default: train_exact)",
     )
+    sp.add_argument("--reuse-existing", action="store_true")
     sp.add_argument("--backend", choices=["neccam_slt"], default="neccam_slt")
     sp.add_argument("--backend-repo", default="")
     sp.add_argument("--config-base", default="")
     sp.add_argument("--backend-loader", choices=["auto", "native", "torchtext"], default="auto")
+    sp.add_argument("--recognition-loss-weight", type=float, default=0.0)
     sp.add_argument("--epochs", type=int, default=20)
     sp.add_argument("--batch-size", type=int, default=16)
     sp.add_argument("--device", default="cpu")
@@ -1261,6 +1264,8 @@ def main() -> None:
             args.config_base,
             "--backend-loader",
             args.backend_loader,
+            "--recognition-loss-weight",
+            args.recognition_loss_weight,
             "--epochs",
             args.epochs,
             "--batch-size",
@@ -1352,6 +1357,10 @@ def main() -> None:
             args.backend_repo,
             "--config-base",
             args.config_base,
+            "--backend-loader",
+            args.backend_loader,
+            "--recognition-loss-weight",
+            args.recognition_loss_weight,
             "--epochs",
             args.epochs,
             "--batch-size",
@@ -1418,6 +1427,8 @@ def main() -> None:
             "--seed",
             args.seed,
         ]
+        if args.reuse_existing:
+            cmd.append("--reuse-existing")
         if args.keep_punctuation:
             cmd.append("--keep-punctuation")
         if args.preprocess:
